@@ -41,7 +41,7 @@ export function StepComplete({ profile }: { profile: Profile }) {
         variants={staggerChild}
         className="mx-auto mt-9 max-w-measure rounded-3xl border border-border bg-surface p-6 text-left shadow-soft"
       >
-        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-text-subtle">
+        <h2 className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle">
           What you told Mindful
         </h2>
 

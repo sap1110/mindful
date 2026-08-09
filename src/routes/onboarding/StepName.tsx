@@ -11,7 +11,7 @@ export interface StepNameProps {
 export function StepName({ value, onChange, error }: StepNameProps) {
   return (
     <TextField
-      label="What should Mindful call you?"
+      label="Your name"
       hint="A first name, a nickname, or anything else. You can change it later."
       placeholder="e.g. Sam"
       value={value}

@@ -191,11 +191,14 @@ export function copingStyle(id: CopingStyleId): CopingStyleOption | undefined {
   return COPING_STYLE_OPTIONS.find((option) => option.id === id)
 }
 
-/** "morning" / "afternoon" / "evening" — used for the greeting on /home. */
+/**
+ * A time-of-day salutation for /home. Returns the whole phrase rather than a
+ * noun so the small hours can read "Still up" instead of "Good late night".
+ */
 export function greetingFor(date: Date): string {
   const hour = date.getHours()
-  if (hour < 5) return 'late night'
-  if (hour < 12) return 'morning'
-  if (hour < 18) return 'afternoon'
-  return 'evening'
+  if (hour < 5) return 'Still up'
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
 }

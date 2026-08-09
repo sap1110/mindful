@@ -98,8 +98,9 @@ export function Landing() {
           </motion.p>
         </div>
 
-        <motion.div variants={fadeUp} className="order-first lg:order-none">
-          <BreathingHalo />
+        {/* Below the pitch on small screens — the words should lead on a phone. */}
+        <motion.div variants={fadeUp}>
+          <BreathingHalo className="mx-auto max-w-[20rem] lg:max-w-none" />
         </motion.div>
       </motion.div>
 

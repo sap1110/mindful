@@ -29,7 +29,7 @@ export function Home() {
   if (!profile) return null
 
   const style = copingStyle(profile.copingStyle)
-  const timeOfDay = greetingFor(new Date())
+  const greeting = greetingFor(new Date())
 
   function handleStartOver() {
     resetProfile()
@@ -50,7 +50,7 @@ export function Home() {
           variants={staggerChild}
           className="text-xs font-semibold uppercase tracking-[0.14em] text-primary"
         >
-          Good {timeOfDay}
+          {greeting}
         </motion.p>
 
         <motion.h1
@@ -86,7 +86,12 @@ export function Home() {
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Button size="lg" disabled iconLeft={<HandHeart className="h-4 w-4" />}>
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  disabled
+                  iconLeft={<HandHeart className="h-4 w-4" />}
+                >
                   Coming in the next release
                 </Button>
                 <p className="text-sm text-text-subtle">
@@ -100,7 +105,10 @@ export function Home() {
         {/* What they told us, reflected back. */}
         {profile.reasons.length > 0 ? (
           <motion.section variants={staggerChild} className="mt-10" aria-labelledby="focus-heading">
-            <h2 id="focus-heading" className="text-sm font-semibold uppercase tracking-[0.12em] text-text-subtle">
+            <h2
+              id="focus-heading"
+              className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle"
+            >
               What Mindful will keep in mind
             </h2>
             <ul className="mt-3 flex flex-wrap gap-2">
@@ -119,7 +127,7 @@ export function Home() {
         <motion.section variants={staggerChild} className="mt-12" aria-labelledby="upcoming-heading">
           <h2
             id="upcoming-heading"
-            className="text-sm font-semibold uppercase tracking-[0.12em] text-text-subtle"
+            className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle"
           >
             Coming next
           </h2>

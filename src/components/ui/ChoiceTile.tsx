@@ -52,7 +52,7 @@ export function ChoiceTile({
             'tile-mark mt-0.5 flex h-5.5 w-5.5 shrink-0 items-center justify-center',
             'border-2 border-border-strong transition-colors duration-250 ease-calm',
             'group-hover:border-primary/50',
-            isMulti ? 'rounded-md' : 'rounded-pill',
+            isMulti ? 'rounded-sm' : 'rounded-pill',
           )}
         >
           <Check
