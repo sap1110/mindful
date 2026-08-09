@@ -9,12 +9,12 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <meta name="theme-color" content="#4f46e5" />
-    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#FAF7F2" />
+    <meta name="color-scheme" content="light" />
 
     <meta
       name="description"
-      content="Mental health companion app for Hack for Humanity hackathon"
+      content="Mindful is a calm, private mental-health companion. Everything you write stays on your device. Not a substitute for professional medical advice."
     />
     <meta name="application-name" content="Mindful" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -22,10 +22,28 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="mobile-web-app-capable" content="yes" />
 
-    <title>Mindful</title>
+    <!-- Type pairing: Fraunces (soft optical serif) for display, DM Sans for UI. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
+    />
+
+    <title>Mindful — a calmer place to check in</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="font-family: Georgia, serif; margin: 3rem auto; max-width: 34rem; color: #1b211e">
+        <h1>Mindful</h1>
+        <p>
+          Mindful needs JavaScript to run. Everything it stores stays on your own device.
+        </p>
+        <p><strong>Mindful is not medical advice.</strong> If you are in crisis, contact your
+        local emergency services or a crisis line right away.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
