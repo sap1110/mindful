@@ -37,3 +37,7 @@ coverage
 .screenshots/
 .devserver.log
 .bolter/
+
+# Playwright
+test-results/
+playwright-report/
