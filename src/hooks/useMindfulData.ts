@@ -1,5 +1,10 @@
 import { useSyncExternalStore } from 'react'
-import { getSnapshot, subscribe, type MindfulData } from '../lib/storage'
+import {
+  getSampleIdsSnapshot,
+  getSnapshot,
+  subscribe,
+  type MindfulData,
+} from '../lib/storage'
 
 /**
  * The on-device dataset, as a live value.
@@ -11,4 +16,13 @@ import { getSnapshot, subscribe, type MindfulData } from '../lib/storage'
  */
 export function useMindfulData(): MindfulData {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+}
+
+/**
+ * Ids of the records the sample-data toggle created, so anything showing them
+ * can label them as sample data rather than passing them off as the person's
+ * own writing.
+ */
+export function useSampleIds(): string[] {
+  return useSyncExternalStore(subscribe, getSampleIdsSnapshot, getSampleIdsSnapshot)
 }

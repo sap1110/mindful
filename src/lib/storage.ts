@@ -29,6 +29,8 @@ export const STORAGE_KEYS = {
   draft: 'mindful.v1.journal.draft',
   /** Ids of records seeded by the sample-data toggle, so it can be undone exactly. */
   sample: 'mindful.v1.sample',
+  /** The day whose journal prompt was dismissed, so it stays dismissed. */
+  promptDismissed: 'mindful.v1.journal.promptDismissed',
 } as const
 
 /* ----------------------------------------------------------------- types */
@@ -221,10 +223,12 @@ export function readAll(): MindfulData {
 
 const listeners = new Set<() => void>()
 let snapshot: MindfulData = EMPTY
+let sampleSnapshot: string[] = []
 let hydrated = false
 
 function refresh(): void {
   snapshot = readAll()
+  sampleSnapshot = readSampleIds()
   hydrated = true
 }
 
@@ -240,6 +244,12 @@ function emit(): void {
 export function getSnapshot(): MindfulData {
   if (!hydrated) refresh()
   return snapshot
+}
+
+/** Companion snapshot: which records came from the sample-data toggle. */
+export function getSampleIdsSnapshot(): string[] {
+  if (!hydrated) refresh()
+  return sampleSnapshot
 }
 
 export function subscribe(listener: () => void): () => void {
@@ -391,6 +401,15 @@ export function clearDraft(): void {
   removeRaw(STORAGE_KEYS.draft)
 }
 
+/** Was today's prompt waved away? Dismissal only lasts for the day it was made. */
+export function isPromptDismissed(date: string): boolean {
+  return readRaw(STORAGE_KEYS.promptDismissed) === date
+}
+
+export function dismissPrompt(date: string): void {
+  writeRaw(STORAGE_KEYS.promptDismissed, date)
+}
+
 /* ----------------------------------------------------------- breathing API */
 
 export interface BreathingInput {
@@ -424,13 +443,10 @@ export function readSampleIds(): string[] {
 export function writeSampleIds(ids: string[]): void {
   if (ids.length === 0) {
     removeRaw(STORAGE_KEYS.sample)
-    return
+  } else {
+    writeList(STORAGE_KEYS.sample, ids)
   }
-  writeList(STORAGE_KEYS.sample, ids)
-}
-
-export function hasSampleData(): boolean {
-  return readSampleIds().length > 0
+  emit()
 }
 
 /** Bulk insert used only by the sample-data seeder. */
