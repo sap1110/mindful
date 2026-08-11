@@ -1,20 +1,41 @@
 import { motion } from 'framer-motion'
-import { BookOpen, HandHeart, NotebookPen, Smile, Sparkles, Waves } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { NotebookPen, Settings as SettingsIcon, Smile, Sparkles, Wind } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AppNav } from '../components/AppNav'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/ui/Button'
+import { buttonStyles } from '../components/ui/buttonStyles'
 import { Card } from '../components/ui/Card'
 import { useProfile } from '../hooks/useProfile'
 import { staggerChild, staggerParent } from '../lib/motion'
-import { copingStyle, greetingFor, reasonLabel } from '../lib/profile'
+import { copingStyle, greetingFor, reasonLabel, type CopingStyleId } from '../lib/profile'
 
-/** Phase 2 surfaces, shown here so the shape of the product is legible today. */
-const UPCOMING = [
-  { icon: Smile, title: 'Daily check-in', body: 'One tap to log how today actually feels.' },
-  { icon: NotebookPen, title: 'Guided journal', body: 'Short prompts shaped by what you told us.' },
-  { icon: Waves, title: 'Calm library', body: 'Breathing, grounding and stretch sessions.' },
-  { icon: BookOpen, title: 'Resources', body: 'Vetted, local support — always one tap away.' },
+/** The screens Mindful can take you to, in the order most people want them. */
+const SURFACES = [
+  { to: '/mood', icon: Smile, title: 'Daily check-in', body: 'One tap to log how today feels.' },
+  {
+    to: '/journal',
+    icon: NotebookPen,
+    title: 'Journal',
+    body: 'A prompt if you want one, a blank page if you do not.',
+  },
+  { to: '/breathe', icon: Wind, title: 'Breathe', body: 'Box, 4-7-8 or a slower, even rhythm.' },
+  {
+    to: '/settings',
+    icon: SettingsIcon,
+    title: 'Your data',
+    body: 'Export it, erase it, or fill the app with samples.',
+  },
 ] as const
+
+/** Where the chosen coping style should send someone first. */
+const FIRST_STEP_ROUTE: Record<CopingStyleId, string> = {
+  breathing: '/breathe',
+  journaling: '/journal',
+  movement: '/breathe',
+  grounding: '/breathe',
+  connection: '/journal',
+}
 
 /**
  * The post-onboarding home. A placeholder for Phase 1, but a real one: it uses
@@ -39,6 +60,7 @@ export function Home() {
   return (
     <PageShell
       disclaimer="panel"
+      nav={<AppNav />}
       headerActions={
         <Button variant="ghost" size="sm" onClick={handleStartOver}>
           Start over
@@ -86,17 +108,10 @@ export function Home() {
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  disabled
-                  iconLeft={<HandHeart className="h-4 w-4" />}
-                >
-                  Coming in the next release
-                </Button>
-                <p className="text-sm text-text-subtle">
-                  Phase 1 sets the tone; the sessions land next.
-                </p>
+                <Link to={FIRST_STEP_ROUTE[profile.copingStyle]} className={buttonStyles({ size: 'lg' })}>
+                  Start now
+                </Link>
+                <p className="text-sm text-text-subtle">Two minutes is plenty. So is one.</p>
               </div>
             </div>
           </Card>
@@ -124,26 +139,28 @@ export function Home() {
           </motion.section>
         ) : null}
 
-        <motion.section variants={staggerChild} className="mt-12" aria-labelledby="upcoming-heading">
+        <motion.section variants={staggerChild} className="mt-12" aria-labelledby="surfaces-heading">
           <h2
-            id="upcoming-heading"
+            id="surfaces-heading"
             className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle"
           >
-            Coming next
+            Everything in Mindful
           </h2>
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
-            {UPCOMING.map(({ icon: Icon, title, body }) => (
-              <li
-                key={title}
-                className="flex items-start gap-3.5 rounded-2xl border border-border bg-surface/70 p-5"
-              >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-primary">
-                  <Icon aria-hidden="true" className="h-4.5 w-4.5" />
-                </span>
-                <span>
-                  <span className="block text-[0.9375rem] font-medium text-text">{title}</span>
-                  <span className="mt-0.5 block text-sm text-text-muted">{body}</span>
-                </span>
+            {SURFACES.map(({ to, icon: Icon, title, body }) => (
+              <li key={to}>
+                <Link
+                  to={to}
+                  className="flex h-full items-start gap-3.5 rounded-2xl border border-border bg-surface/70 p-5 transition-colors hover:border-primary/40 hover:bg-surface"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-primary">
+                    <Icon aria-hidden="true" className="h-4.5 w-4.5" />
+                  </span>
+                  <span>
+                    <span className="block text-[0.9375rem] font-medium text-text">{title}</span>
+                    <span className="mt-0.5 block text-sm text-text-muted">{body}</span>
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
