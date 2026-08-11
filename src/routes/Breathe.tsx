@@ -194,8 +194,12 @@ export function Breathe() {
 
             <p role="status" aria-live="polite" className="mt-4 min-h-[1.5rem] text-center text-sm text-success">
               {isComplete && session.lastSession
-                ? `Session recorded — ${session.lastSession.completedCycles} ${
-                    session.lastSession.completedCycles === 1 ? 'round' : 'rounds'
+                ? `Session recorded — ${
+                    session.lastSession.completedCycles === 0
+                      ? 'less than a full round'
+                      : `${session.lastSession.completedCycles} ${
+                          session.lastSession.completedCycles === 1 ? 'round' : 'rounds'
+                        }`
                   }, ${formatDuration(session.lastSession.durationMs)}. Nothing else to do.`
                 : ''}
             </p>

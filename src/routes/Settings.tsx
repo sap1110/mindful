@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion'
 import { Database, Download, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { AppNav } from '../components/AppNav'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/ui/Button'
@@ -21,7 +20,6 @@ import { downloadExport, eraseAll } from '../lib/storage'
  * show. Each control says plainly what it will do before you press it.
  */
 export function Settings() {
-  const navigate = useNavigate()
   const { profile, resetProfile } = useProfile()
   const { moods, journal, breathing } = useMindfulData()
   const sampleIds = useSampleIds()
@@ -38,11 +36,11 @@ export function Settings() {
   }
 
   function handleErase() {
+    // eraseAll sweeps every key under the mindful namespace, the onboarding
+    // profile included, so clearing the profile in memory too leaves the gate
+    // to do what it already does for a first-time visitor: show the way in.
     eraseAll()
-    // eraseAll sweeps every mindful key, the profile included, so the guard
-    // would bounce us out anyway — leave deliberately rather than be thrown.
     resetProfile()
-    navigate('/', { replace: true })
   }
 
   function handleToggleSample() {
