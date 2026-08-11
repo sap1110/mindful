@@ -36,3 +36,4 @@ coverage
 # Smoke-test artefacts
 .screenshots/
 .devserver.log
+.bolter/
