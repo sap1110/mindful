@@ -18,6 +18,12 @@ export interface PageShellProps {
   disclaimer?: 'note' | 'panel'
   /** Constrain the main column. `wide` is for the landing hero. */
   width?: 'narrow' | 'wide'
+  /**
+   * The persistent section bar for signed-in screens. Rendered after the
+   * footer and given room by padding the page, so a fixed bar never covers
+   * the disclaimer.
+   */
+  nav?: ReactNode
   className?: string
 }
 
@@ -33,10 +39,11 @@ export function PageShell({
   backdrop = 'calm',
   disclaimer = 'note',
   width = 'narrow',
+  nav,
   className,
 }: PageShellProps) {
   return (
-    <div className="relative flex min-h-dvh flex-col">
+    <div className={cn('relative flex min-h-dvh flex-col', nav && 'pb-24 sm:pb-28')}>
       <AmbientBackdrop intensity={backdrop} />
 
       <a href="#main" className="skip-link">
@@ -88,6 +95,8 @@ export function PageShell({
           </p>
         </div>
       </footer>
+
+      {nav}
     </div>
   )
 }
