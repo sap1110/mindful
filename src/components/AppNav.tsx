@@ -1,10 +1,11 @@
-import { House, NotebookPen, Settings, Smile, Wind } from 'lucide-react'
+import { ClipboardCheck, House, NotebookPen, Settings, Smile, Wind } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '../lib/cn'
 
 const ITEMS = [
   { to: '/home', label: 'Home', icon: House },
   { to: '/mood', label: 'Mood', icon: Smile },
+  { to: '/self-check', label: 'Check', icon: ClipboardCheck },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/breathe', label: 'Breathe', icon: Wind },
   { to: '/settings', label: 'Settings', icon: Settings },
@@ -42,9 +43,12 @@ export function AppNav({ className }: { className?: string }) {
               to={to}
               className={({ isActive }) =>
                 cn(
-                  'group flex h-full min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2',
-                  'text-2xs font-medium tracking-[0.02em] transition-colors duration-250 ease-calm',
-                  'sm:min-h-12 sm:flex-row sm:gap-2 sm:rounded-pill sm:px-4 sm:text-sm',
+                  // Six destinations have to fit a 375px phone, so the mobile
+                  // label runs tight and unpadded; from `sm` up there is room
+                  // for the roomier pill treatment.
+                  'group flex h-full min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0.5 py-2',
+                  'text-2xs font-medium tracking-normal transition-colors duration-250 ease-calm',
+                  'sm:min-h-12 sm:flex-row sm:gap-2 sm:rounded-pill sm:px-4 sm:tracking-[0.02em] sm:text-sm',
                   isActive
                     ? 'text-primary'
                     : 'text-text-subtle hover:bg-surface-muted hover:text-text',

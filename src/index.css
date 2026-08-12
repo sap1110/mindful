@@ -31,7 +31,10 @@
     /* Text — all AA or better on --c-background */
     --c-text: 27 33 30; /* 15.5:1 */
     --c-text-muted: 95 106 99; /* 5.3:1  */
-    --c-text-subtle: 102 113 105; /* 4.8:1  */
+    /* 4.7:1 on --c-surface-muted, which is the darkest surface it sits on —
+       the floating nav composites over sunken cards, so a value that only
+       cleared AA against --c-background failed there by a hair. */
+    --c-text-subtle: 99 110 102; /* 5.1:1  */
     --c-text-inverse: 253 252 250;
 
     /* Lines */

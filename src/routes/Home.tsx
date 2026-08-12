@@ -1,5 +1,12 @@
 import { motion } from 'framer-motion'
-import { NotebookPen, Settings as SettingsIcon, Smile, Sparkles, Wind } from 'lucide-react'
+import {
+  ClipboardCheck,
+  NotebookPen,
+  Settings as SettingsIcon,
+  Smile,
+  Sparkles,
+  Wind,
+} from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AppNav } from '../components/AppNav'
 import { PageShell } from '../components/PageShell'
@@ -13,6 +20,12 @@ import { copingStyle, greetingFor, reasonLabel, type CopingStyleId } from '../li
 /** The screens Mindful can take you to, in the order most people want them. */
 const SURFACES = [
   { to: '/mood', icon: Smile, title: 'Daily check-in', body: 'One tap to log how today feels.' },
+  {
+    to: '/self-check',
+    icon: ClipboardCheck,
+    title: 'Self-check',
+    body: 'The PHQ-9 and GAD-7, scored on this device.',
+  },
   {
     to: '/journal',
     icon: NotebookPen,

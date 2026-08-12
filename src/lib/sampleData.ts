@@ -1,6 +1,7 @@
 import { addDays, todayISO } from './date'
 import { MOOD_TAGS } from './mood'
 import { promptForDate } from './prompts'
+import { bandForScore, getScreener, type ScreenerId } from './screener'
 import {
   createId,
   insertRecords,
@@ -12,6 +13,7 @@ import {
   type JournalEntry,
   type MoodEntry,
   type MoodScore,
+  type ScreenerResult,
 } from './storage'
 
 /**
@@ -66,6 +68,79 @@ const JOURNAL_BODIES: readonly string[] = [
 
 function pick<T>(items: readonly T[], random: () => number): T {
   return items[Math.floor(random() * items.length)]
+}
+
+/* ------------------------------------------------------------- self-checks */
+
+/**
+ * Sample self-check results, easing over the month in step with the mood shape
+ * above — a fortnight-scale echo of the same story, not a second unrelated one.
+ *
+ * `[daysAgo, score]`. The spacing is at least a fortnight, because that is what
+ * the app tells people to do and demo data that ignores its own advice is a bad
+ * look on the one screen a judge is most likely to read closely.
+ */
+const SAMPLE_SCREENER_RUNS: Readonly<Record<ScreenerId, readonly (readonly [number, number])[]>> = {
+  phq9: [
+    [28, 14],
+    [14, 11],
+    [1, 8],
+  ],
+  gad7: [
+    [21, 12],
+    [4, 9],
+  ],
+}
+
+/**
+ * Spread a total across the instrument's items, 3 at a time.
+ *
+ * Risk items are always left at zero: seeding a fabricated answer to "thoughts
+ * that you would be better off dead" would put words in someone's mouth and
+ * trip the crisis routing on data nobody entered. The totals above are all
+ * reachable without it.
+ */
+function spreadAnswers(screenerId: ScreenerId, total: number): Record<string, number> {
+  const screener = getScreener(screenerId)
+  const answers: Record<string, number> = {}
+  let left = total
+
+  for (const question of screener.questions) {
+    if (question.isRiskItem) {
+      answers[question.id] = 0
+      continue
+    }
+    const value = Math.max(0, Math.min(3, left))
+    answers[question.id] = value
+    left -= value
+  }
+
+  return answers
+}
+
+function buildSampleScreeners(today: string): ScreenerResult[] {
+  const results: ScreenerResult[] = []
+
+  for (const [id, runs] of Object.entries(SAMPLE_SCREENER_RUNS) as [
+    ScreenerId,
+    readonly (readonly [number, number])[],
+  ][]) {
+    for (const [daysAgo, score] of runs) {
+      const date = addDays(today, -daysAgo)
+      results.push({
+        id: createId('scrn'),
+        screenerId: id,
+        date,
+        score,
+        bandId: bandForScore(getScreener(id), score).id,
+        answers: spreadAnswers(id, score),
+        riskFlagged: false,
+        createdAt: `${date}T18:30:00.000Z`,
+      })
+    }
+  }
+
+  return results
 }
 
 function buildSample(today: string): {
@@ -136,16 +211,18 @@ function buildSample(today: string): {
 export function loadSampleData(): void {
   const today = todayISO()
   const sample = buildSample(today)
+  const screeners = buildSampleScreeners(today)
 
   const taken = new Set(readMoodEntries().map((entry) => entry.date))
   const moods = sample.moods.filter((entry) => !taken.has(entry.date))
 
-  insertRecords({ moods, journal: sample.journal, breathing: sample.breathing })
+  insertRecords({ moods, journal: sample.journal, breathing: sample.breathing, screeners })
 
   const ids = [
     ...moods.map((entry) => entry.id),
     ...sample.journal.map((entry) => entry.id),
     ...sample.breathing.map((session) => session.id),
+    ...screeners.map((result) => result.id),
   ]
   writeSampleIds([...readSampleIds(), ...ids])
 }
