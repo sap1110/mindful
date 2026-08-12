@@ -36,3 +36,11 @@ coverage
 # Smoke-test artefacts
 .screenshots/
 .devserver.log
+.bolter/
+
+# Playwright
+test-results/
+playwright-report/
+
+# Local build-agent scratch
+.bolter-task.md

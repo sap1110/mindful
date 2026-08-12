@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "smoke": "node scripts/smoke.mjs",
-    "verify": "npm run lint && npm run build"
+    "verify": "npm run lint && npm run build && npm run test",
+    "test": "playwright test"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.17.0",
+    "@playwright/test": "^1.62.1",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
