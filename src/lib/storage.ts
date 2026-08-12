@@ -517,19 +517,6 @@ export function saveScreenerResult(input: ScreenerInput): ScreenerResult {
   return result
 }
 
-/** Results for one instrument, newest first. */
-export function readScreenerHistory(screenerId: ScreenerId): ScreenerResult[] {
-  return readScreenerResults().filter((result) => result.screenerId === screenerId)
-}
-
-export function deleteScreenerResult(id: string): void {
-  writeList(
-    STORAGE_KEYS.screeners,
-    readScreenerResults().filter((result) => result.id !== id),
-  )
-  emit()
-}
-
 /* ------------------------------------------------------- sample-data marks */
 
 /** Ids seeded by the sample-data toggle, so turning it off removes only those. */

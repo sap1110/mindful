@@ -97,11 +97,6 @@ export async function loadEmbedder(
   }
 }
 
-/** True once the weights are in memory, so callers can skip the consent gate. */
-export function isLoaded(): boolean {
-  return pipelinePromise !== null
-}
-
 /**
  * Embed a batch of strings into unit-length vectors.
  *

@@ -1,7 +1,7 @@
 import { NotebookPen, Smile } from 'lucide-react'
 import { cn } from '../../lib/cn'
-import { describePassageDay } from '../../lib/companion/corpus'
-import { describeTrajectory, type PersonalMatch } from '../../lib/companion/retrieve'
+import { describePassageDay } from '../../lib/echo/corpus'
+import { describeTrajectory, type PersonalMatch } from '../../lib/echo/retrieve'
 import { Card } from '../ui/Card'
 
 export interface MatchCardProps {

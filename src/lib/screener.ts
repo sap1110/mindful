@@ -260,10 +260,6 @@ export function getScreener(id: ScreenerId): Screener {
   return SCREENERS.find((screener) => screener.id === id) ?? PHQ9
 }
 
-export function isScreenerId(value: unknown): value is ScreenerId {
-  return value === 'phq9' || value === 'gad7'
-}
-
 /** The highest total an instrument can reach — 27 for PHQ-9, 21 for GAD-7. */
 export function maxScore(screener: Screener): number {
   return screener.questions.length * 3

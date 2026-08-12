@@ -1,16 +1,16 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { buildCorpus } from '../lib/companion/corpus'
-import { embed, embedOne, isSupported, type EngineStatus } from '../lib/companion/embeddings'
-import { keywordRetrieve } from '../lib/companion/keyword'
-import { LIBRARY, libraryEmbeddingText } from '../lib/companion/library'
+import { buildCorpus } from '../lib/echo/corpus'
+import { embed, embedOne, isSupported, type EngineStatus } from '../lib/echo/embeddings'
+import { keywordRetrieve } from '../lib/echo/keyword'
+import { LIBRARY, libraryEmbeddingText } from '../lib/echo/library'
 import {
   retrieve,
   summarise,
   type IndexedCard,
   type IndexedPassage,
   type RetrievalResult,
-} from '../lib/companion/retrieve'
-import { assessRisk, type RiskAssessment } from '../lib/companion/safety'
+} from '../lib/echo/retrieve'
+import { assessRisk, type RiskAssessment } from '../lib/echo/safety'
 import { useMindfulData } from './useMindfulData'
 
 /** Which engine produced an answer, so the UI can be honest about its limits. */
@@ -26,7 +26,7 @@ export interface Reflection {
   mode: SearchMode
 }
 
-export interface UseReflection {
+export interface UseEcho {
   status: EngineStatus
   /** True once the index is built and questions can be asked. */
   ready: boolean
@@ -55,7 +55,7 @@ export interface UseReflection {
  * sessions. See `retrieve.ts` for why keeping vectors of someone's diary on
  * disk is a worse trade than recomputing them.
  */
-export function useReflection(): UseReflection {
+export function useEcho(): UseEcho {
   const data = useMindfulData()
   const [status, setStatus] = useState<EngineStatus>(
     isSupported() ? { state: 'idle' } : { state: 'unavailable', reason: 'no-wasm' },
