@@ -1,4 +1,4 @@
-import { ClipboardCheck, House, NotebookPen, Settings, Smile, Wind } from 'lucide-react'
+import { ClipboardCheck, History, House, NotebookPen, Settings, Smile, Wind } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '../lib/cn'
 
@@ -6,6 +6,7 @@ const ITEMS = [
   { to: '/home', label: 'Home', icon: House },
   { to: '/mood', label: 'Mood', icon: Smile },
   { to: '/self-check', label: 'Check', icon: ClipboardCheck },
+  { to: '/echo', label: 'Echo', icon: History },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/breathe', label: 'Breathe', icon: Wind },
   { to: '/settings', label: 'Settings', icon: Settings },

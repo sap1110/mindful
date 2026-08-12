@@ -41,6 +41,67 @@ hackathon, aimed at the **Best Design** track.
   on PHQ-9 item 9 puts them *above* the score, because a low total is exactly
   the case a score-first layout would bury.
 
+**Phase 4 — Echo, the on-device AI layer.**
+
+- Describe how things are now, in your own words, and Echo searches everything
+  you have already written for the entries that read like this one.
+- Each match shows your words **verbatim**, and what the following fortnight of
+  check-ins actually looked like.
+- A curated, cited library of published guidance (NHS, NIMH, MedlinePlus, WHO,
+  NCCIH) so someone with no history yet still gets something real.
+- Works immediately with no download at all; the ~30MB model is an **upgrade**
+  from matching words to matching meaning, never a gate.
+
+## How the AI works
+
+Echo **retrieves, it does not generate.** The model turns text into vectors and
+that is the whole of its job — there is no language model writing sentences
+about your mental health, which means there is no hallucination surface, no
+invented diagnosis, and nothing to police on the way out.
+
+The claim it makes is deliberately narrow, and every part of it is evidence
+rather than interpretation:
+
+> You have written something like this before · here it is, in your words ·
+> here is what the fortnight after it looked like
+
+**Why retrieval rather than a chatbot.** A generative companion would have cost
+~880MB, required WebGPU (ruling out Safari, Firefox and most phones), and — the
+deciding point — would not have used your data at all. A generic chatbot is the
+least differentiated thing a private journalling app could ship. Retrieval
+answers a question only Mindful *can* answer, precisely because your journal is
+already on the device.
+
+**The trajectory is allowed to deliver bad news.** If your check-ins fell after
+a similar entry, Echo says so. Reporting only the times things improved would
+be a comforting lie, and it is exactly the case where the honest next step is a
+conversation with a person rather than reassurance from a browser tab.
+
+**It will not claim a pattern it has not found.** Cosine similarity always
+returns a nearest neighbour, so there is a relevance floor: below it, Echo says
+nothing matched rather than dressing up noise as insight.
+
+**Two engines, one of them free.** Word-overlap search runs everywhere with no
+download. The embedding model upgrades it from matching vocabulary to matching
+meaning. The UI always names which one answered, because a keyword pass that
+found nothing is weak evidence of absence.
+
+**Safety runs first and independently.** Risk assessment happens on the input
+before any search, and does not depend on the model having loaded. An acute
+disclosure replaces the results entirely — handing someone their old diary
+entries in response to "I don't want to be here anymore" would be a grotesque
+answer to what they just said.
+
+**On the network promise.** The weights come down once and are cached; nothing
+ever goes up. No entry, query, embedding or analytic event is ever transmitted.
+The library was fetched at build time and frozen into the bundle for the same
+reason — a live content feed would quietly turn every reflection into a request
+carrying what the person just typed.
+
+Embedding vectors are held in memory only, never written to storage. They are
+derived from journal text, so a cached copy on disk would be one more thing the
+erase button has to destroy.
+
 ## Not a diagnosis
 
 The screeners are real instruments and the scoring is faithful to the published
@@ -57,6 +118,7 @@ one thing Mindful will not do is tell someone what is wrong with them.
 | Motion     | framer-motion 13                           |
 | Routing    | react-router-dom 7                         |
 | Icons      | lucide-react                               |
+| On-device AI | transformers.js 4 · `all-MiniLM-L6-v2`, quantised, on WASM |
 | Linting    | ESLint 9 (flat config) + typescript-eslint |
 | Smoke test | Playwright + axe-core                      |
 
@@ -118,7 +180,7 @@ globally in `index.css`.
 
 WCAG 2.1 A/AA is a judging criterion and is verified, not assumed — `npm run
 test` fails the build on any axe violation, on every screen, in both empty and
-filled states. 46 tests at the time of writing.
+filled states. 54 tests at the time of writing.
 
 - Every colour pair is contrast-checked; ratios are noted next to the tokens.
   The suite is what caught `text-subtle` sitting at 4.43:1 where the floating
@@ -149,6 +211,13 @@ src/
 │   ├── storage.ts             # The localStorage layer: read, write, export, erase
 │   ├── screener.ts            # PHQ-9 / GAD-7 items, bands, scoring, cadence
 │   ├── crisis.ts              # Helplines and the emergency note
+│   ├── companion/             # Echo's engine
+│   │   ├── safety.ts          #   risk assessment — runs first, needs no model
+│   │   ├── embeddings.ts      #   transformers.js loader, lazy + consented
+│   │   ├── corpus.ts          #   your entries → searchable passages
+│   │   ├── library.ts         #   the cited guidance library
+│   │   ├── retrieve.ts        #   ranking, relevance floor, trajectory
+│   │   └── keyword.ts         #   the no-model fallback search
 │   ├── mood.ts · breathing.ts · prompts.ts · date.ts
 │   └── sampleData.ts          # The labelled, removable demo dataset
 ├── context/                   # ProfileProvider + context object
@@ -162,6 +231,7 @@ src/
 │   ├── RequireProfile.tsx     # The on-device auth gate
 │   ├── screener/              # ScreenerItem, ScoreScale, ResultPanel, History
 │   ├── crisis/                # CrisisResources
+│   ├── echo/                  # ConsentGate, MatchCard, SuggestionCard
 │   ├── mood/ · journal/ · breathe/
 │   └── ui/                    # Button, Card, Chip, TextField, ChoiceTile, …
 └── routes/
@@ -170,6 +240,7 @@ src/
     ├── Home.tsx               # /home        (gated)
     ├── Mood.tsx               # /mood        (gated)
     ├── SelfCheck.tsx          # /self-check  (gated)
+    ├── Echo.tsx               # /echo        (gated)
     ├── Journal.tsx            # /journal     (gated)
     ├── Breathe.tsx            # /breathe     (gated)
     ├── Settings.tsx           # /settings    (gated)
@@ -195,6 +266,21 @@ Crisis resources link to independent services (Find a Helpline, Befrienders
 Worldwide, Crisis Text Line, 988, Samaritans, Lifeline) and are not affiliated
 with Mindful.
 
+**Echo's guidance library.** Retrieved 2026-08-13, distilled, and frozen into
+the bundle. Mindful makes no health claims of its own — every card names its
+source in the copy and links to the original.
+
+| Source | Licence |
+| ------ | ------- |
+| NHS | Contains public sector information licensed under the Open Government Licence v3.0 |
+| NIMH | US federal government work — public domain |
+| MedlinePlus (US National Library of Medicine) | US federal government work — public domain |
+| NCCIH | US federal government work — public domain |
+| World Health Organization | © WHO, reproduced under CC BY-NC-SA 3.0 IGO — not an endorsement of Mindful |
+
+**Model.** `sentence-transformers/all-MiniLM-L6-v2` (Apache 2.0), served in the
+`Xenova` ONNX conversion, run via 🤗 transformers.js (Apache 2.0).
+
 Typefaces: Fraunces and DM Sans, both SIL Open Font License. Icons: lucide.
 
 ## Conventions
@@ -203,6 +289,11 @@ Typefaces: Fraunces and DM Sans, both SIL Open Font License. Icons: lucide.
   `tailwind.config.js` **and** `theme.ts` — never inline hex.
 - Screener item wording, options and band thresholds are not editorial copy.
   Changing them makes the published scoring bands meaningless.
+- Echo retrieves; it never generates. If a change would have the app write a
+  sentence about someone's mental health rather than quote one of theirs or an
+  attributed source, it is the wrong change.
+- No runtime network call, ever — including for content. The guidance library
+  is fetched at build time and committed.
 - Any screen that could read as health guidance renders `<Disclaimer />`;
   `PageShell` does it for you.
 - Nothing leaves the device. No network calls, no analytics, no accounts.

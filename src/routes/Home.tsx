@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import {
   ClipboardCheck,
+  History,
   NotebookPen,
   Settings as SettingsIcon,
   Smile,
@@ -25,6 +26,12 @@ const SURFACES = [
     icon: ClipboardCheck,
     title: 'Self-check',
     body: 'The PHQ-9 and GAD-7, scored on this device.',
+  },
+  {
+    to: '/echo',
+    icon: History,
+    title: 'Echo',
+    body: 'Find the times you have written something like this before.',
   },
   {
     to: '/journal',

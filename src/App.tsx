@@ -3,6 +3,7 @@ import { RequireProfile } from './components/RequireProfile'
 import { Breathe } from './routes/Breathe'
 import { Home } from './routes/Home'
 import { Journal } from './routes/Journal'
+import { Echo } from './routes/Echo'
 import { Landing } from './routes/Landing'
 import { Mood } from './routes/Mood'
 import { NotFound } from './routes/NotFound'
@@ -15,6 +16,7 @@ const GUARDED = [
   { path: '/home', element: <Home /> },
   { path: '/mood', element: <Mood /> },
   { path: '/self-check', element: <SelfCheck /> },
+  { path: '/echo', element: <Echo /> },
   { path: '/journal', element: <Journal /> },
   { path: '/breathe', element: <Breathe /> },
   { path: '/settings', element: <Settings /> },
@@ -28,6 +30,7 @@ const GUARDED = [
  *   /home        your space
  *   /mood        the daily check-in and its history
  *   /self-check  the validated PHQ-9 / GAD-7 questionnaires
+ *   /echo        on-device semantic search across your own entries
  *   /journal     prompt, composer and earlier entries
  *   /breathe     guided breathing sessions
  *   /settings    export, erase and sample data
