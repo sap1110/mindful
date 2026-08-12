@@ -152,8 +152,6 @@ export interface LibraryMatch {
   score: number
 }
 
-export type Match = PersonalMatch | LibraryMatch
-
 export interface RetrievalResult {
   personal: PersonalMatch[]
   library: LibraryMatch[]

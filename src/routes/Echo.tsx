@@ -10,8 +10,8 @@ import { SuggestionCard } from '../components/echo/SuggestionCard'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { TextArea } from '../components/ui/TextArea'
-import { useReflection } from '../hooks/useReflection'
-import { ACUTE_BODY, ACUTE_HEADING } from '../lib/companion/safety'
+import { useEcho } from '../hooks/useEcho'
+import { ACUTE_BODY, ACUTE_HEADING } from '../lib/echo/safety'
 import { staggerChild, staggerParent } from '../lib/motion'
 
 const PLACEHOLDER = 'Everything feels like too much today and I cannot work out why.'
@@ -32,7 +32,7 @@ const PLACEHOLDER = 'Everything feels like too much today and I cannot work out 
  * underneath.
  */
 export function Echo() {
-  const { status, ready, enable, ask, reflection, thinking, clear, passageCount } = useReflection()
+  const { status, ready, enable, ask, reflection, thinking, clear, passageCount } = useEcho()
   const [draft, setDraft] = useState('')
   const resultsRef = useRef<HTMLDivElement>(null)
 

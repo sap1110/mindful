@@ -1,5 +1,5 @@
 import { ExternalLink } from 'lucide-react'
-import { librarySource, type LibraryCard } from '../../lib/companion/library'
+import { librarySource, type LibraryCard } from '../../lib/echo/library'
 import { Card } from '../ui/Card'
 
 export interface SuggestionCardProps {

@@ -1,5 +1,5 @@
 import { Download, Loader2, ShieldCheck, WifiOff } from 'lucide-react'
-import { MODEL_DOWNLOAD_MB, type EngineStatus } from '../../lib/companion/embeddings'
+import { MODEL_DOWNLOAD_MB, type EngineStatus } from '../../lib/echo/embeddings'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 
