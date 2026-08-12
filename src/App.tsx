@@ -7,12 +7,14 @@ import { Landing } from './routes/Landing'
 import { Mood } from './routes/Mood'
 import { NotFound } from './routes/NotFound'
 import { Onboarding } from './routes/Onboarding'
+import { SelfCheck } from './routes/SelfCheck'
 import { Settings } from './routes/Settings'
 
 /** The signed-in screens, all behind the same on-device profile gate. */
 const GUARDED = [
   { path: '/home', element: <Home /> },
   { path: '/mood', element: <Mood /> },
+  { path: '/self-check', element: <SelfCheck /> },
   { path: '/journal', element: <Journal /> },
   { path: '/breathe', element: <Breathe /> },
   { path: '/settings', element: <Settings /> },
@@ -25,6 +27,7 @@ const GUARDED = [
  *   /onboarding  the three-step flow (redirects to /home once a profile exists)
  *   /home        your space
  *   /mood        the daily check-in and its history
+ *   /self-check  the validated PHQ-9 / GAD-7 questionnaires
  *   /journal     prompt, composer and earlier entries
  *   /breathe     guided breathing sessions
  *   /settings    export, erase and sample data
