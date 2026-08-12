@@ -21,14 +21,14 @@ import { downloadExport, eraseAll } from '../lib/storage'
  */
 export function Settings() {
   const { profile, resetProfile } = useProfile()
-  const { moods, journal, breathing } = useMindfulData()
+  const { moods, journal, breathing, screeners } = useMindfulData()
   const sampleIds = useSampleIds()
 
   const [confirmingErase, setConfirmingErase] = useState(false)
   const [announcement, setAnnouncement] = useState('')
 
   const hasSample = sampleIds.length > 0
-  const total = moods.length + journal.length + breathing.length
+  const total = moods.length + journal.length + breathing.length + screeners.length
 
   function handleExport() {
     downloadExport()
@@ -73,7 +73,9 @@ export function Settings() {
                 journal.length === 1 ? 'entry' : 'entries'
               } · ${breathing.length} breathing ${
                 breathing.length === 1 ? 'session' : 'sessions'
-              }${profile ? ` · profile for ${profile.name}` : ''}`}
+              } · ${screeners.length} self-check${screeners.length === 1 ? '' : 's'}${
+                profile ? ` · profile for ${profile.name}` : ''
+              }`}
         </motion.p>
 
         <p role="status" aria-live="polite" className="mt-4 min-h-[1.25rem] text-sm text-success">
@@ -141,9 +143,9 @@ export function Settings() {
               Erase everything
             </h2>
             <p className="mt-2 max-w-prose text-text-muted">
-              Deletes every check-in, journal entry, breathing session and your profile from this
-              browser. There is no copy anywhere else, so this cannot be undone — export first if
-              you might want it later.
+              Deletes every check-in, journal entry, breathing session, self-check result and your
+              profile from this browser. There is no copy anywhere else, so this cannot be undone —
+              export first if you might want it later.
             </p>
 
             {confirmingErase ? (

@@ -105,7 +105,7 @@ export const colors = {
 
   text: palette.ink, // 15.5:1 on background
   textMuted: '#5F6A63', // 5.3:1
-  textSubtle: '#667169', // 4.8:1
+  textSubtle: '#636E66', // 5.1:1 (4.7:1 on surfaceMuted)
   textInverse: palette.cream[50],
 
   border: '#E4DDD0',

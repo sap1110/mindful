@@ -5,6 +5,7 @@ export const PROFILE_KEY = 'mindful.profile.v1'
 export const MOODS_KEY = 'mindful.v1.moods'
 export const JOURNAL_KEY = 'mindful.v1.journal'
 export const BREATHING_KEY = 'mindful.v1.breathing'
+export const SCREENERS_KEY = 'mindful.v1.screeners'
 
 /** A completed onboarding, so a test can start on the screen it cares about. */
 export const PROFILE = {

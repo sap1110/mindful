@@ -1,5 +1,7 @@
+import type { ScreenerId } from './screener'
+
 /**
- * On-device storage for everything Phase 2 records.
+ * On-device storage for everything Mindful records.
  *
  * The whole app is a localStorage app: no backend, no account, no network
  * calls, no analytics. That is a promise made to the person using it on the
@@ -25,6 +27,7 @@ export const STORAGE_KEYS = {
   moods: 'mindful.v1.moods',
   journal: 'mindful.v1.journal',
   breathing: 'mindful.v1.breathing',
+  screeners: 'mindful.v1.screeners',
   /** The in-progress journal entry, autosaved as you type. */
   draft: 'mindful.v1.journal.draft',
   /** Ids of records seeded by the sample-data toggle, so it can be undone exactly. */
@@ -74,10 +77,37 @@ export interface JournalDraft {
   updatedAt: string
 }
 
+/**
+ * One completed run of a validated self-check.
+ *
+ * The per-item `answers` are kept, not just the total, because a total alone
+ * cannot answer "was that the sleep question or the hopelessness question" when
+ * someone looks back — and because `riskFlagged` has to stay reconstructible
+ * rather than being a bare boolean we hope was written correctly.
+ *
+ * Unlike a mood check-in these are never edited: a result is a record of what
+ * was answered on a day, so a retake is a new record and the old one stands.
+ */
+export interface ScreenerResult {
+  id: string
+  screenerId: ScreenerId
+  /** Local calendar day, `YYYY-MM-DD`. */
+  date: string
+  score: number
+  /** The `ScoreBand.id` the score fell in when it was taken. */
+  bandId: string
+  /** Answers keyed by question id, each 0-3. */
+  answers: Record<string, number>
+  /** PHQ-9 item 9 was answered above "Not at all". */
+  riskFlagged: boolean
+  createdAt: string
+}
+
 export interface MindfulData {
   moods: MoodEntry[]
   journal: JournalEntry[]
   breathing: BreathingSession[]
+  screeners: ScreenerResult[]
 }
 
 export interface ExportBundle extends MindfulData {
@@ -86,7 +116,7 @@ export interface ExportBundle extends MindfulData {
   app: 'mindful'
 }
 
-const EMPTY: MindfulData = { moods: [], journal: [], breathing: [] }
+const EMPTY: MindfulData = { moods: [], journal: [], breathing: [], screeners: [] }
 
 /* ------------------------------------------------------------- primitives */
 
@@ -175,6 +205,20 @@ function isBreathingSession(value: unknown): value is BreathingSession {
   return isNonEmptyString(value.completedAt)
 }
 
+function isScreenerResult(value: unknown): value is ScreenerResult {
+  if (!isRecord(value)) return false
+  if (!isNonEmptyString(value.id) || !isIsoDay(value.date)) return false
+  if (value.screenerId !== 'phq9' && value.screenerId !== 'gad7') return false
+  if (typeof value.score !== 'number' || !Number.isInteger(value.score) || value.score < 0) {
+    return false
+  }
+  if (!isNonEmptyString(value.bandId)) return false
+  if (typeof value.riskFlagged !== 'boolean') return false
+  if (!isRecord(value.answers)) return false
+  if (!Object.values(value.answers).every((answer) => typeof answer === 'number')) return false
+  return isNonEmptyString(value.createdAt)
+}
+
 /* ------------------------------------------------------------------ ids */
 
 let idCounter = 0
@@ -210,12 +254,19 @@ export function readBreathingSessions(): BreathingSession[] {
   )
 }
 
+export function readScreenerResults(): ScreenerResult[] {
+  return readList(STORAGE_KEYS.screeners, isScreenerResult).sort((a, b) =>
+    b.createdAt.localeCompare(a.createdAt),
+  )
+}
+
 /** The whole on-device dataset, newest first in each collection. */
 export function readAll(): MindfulData {
   return {
     moods: readMoodEntries(),
     journal: readJournalEntries(),
     breathing: readBreathingSessions(),
+    screeners: readScreenerResults(),
   }
 }
 
@@ -433,6 +484,52 @@ export function recordBreathingSession(input: BreathingInput): BreathingSession 
   return session
 }
 
+/* ----------------------------------------------------------- screener API */
+
+export interface ScreenerInput {
+  screenerId: ScreenerId
+  date: string
+  score: number
+  bandId: string
+  answers: Record<string, number>
+  riskFlagged: boolean
+}
+
+/**
+ * Append a completed self-check. Always an insert — see `ScreenerResult` for
+ * why results are never edited in place.
+ */
+export function saveScreenerResult(input: ScreenerInput): ScreenerResult {
+  const result: ScreenerResult = {
+    id: createId('scrn'),
+    screenerId: input.screenerId,
+    date: input.date,
+    score: input.score,
+    bandId: input.bandId,
+    answers: { ...input.answers },
+    riskFlagged: input.riskFlagged,
+    createdAt: new Date().toISOString(),
+  }
+
+  writeList(STORAGE_KEYS.screeners, [result, ...readScreenerResults()])
+  stampSchema()
+  emit()
+  return result
+}
+
+/** Results for one instrument, newest first. */
+export function readScreenerHistory(screenerId: ScreenerId): ScreenerResult[] {
+  return readScreenerResults().filter((result) => result.screenerId === screenerId)
+}
+
+export function deleteScreenerResult(id: string): void {
+  writeList(
+    STORAGE_KEYS.screeners,
+    readScreenerResults().filter((result) => result.id !== id),
+  )
+  emit()
+}
+
 /* ------------------------------------------------------- sample-data marks */
 
 /** Ids seeded by the sample-data toggle, so turning it off removes only those. */
@@ -463,6 +560,9 @@ export function insertRecords(data: Partial<MindfulData>): void {
   if (data.breathing?.length) {
     writeList(STORAGE_KEYS.breathing, [...data.breathing, ...readBreathingSessions()])
   }
+  if (data.screeners?.length) {
+    writeList(STORAGE_KEYS.screeners, [...data.screeners, ...readScreenerResults()])
+  }
   stampSchema()
   emit()
 }
@@ -481,6 +581,10 @@ export function removeRecords(ids: readonly string[]): void {
   writeList(
     STORAGE_KEYS.breathing,
     readBreathingSessions().filter((session) => !drop.has(session.id)),
+  )
+  writeList(
+    STORAGE_KEYS.screeners,
+    readScreenerResults().filter((result) => !drop.has(result.id)),
   )
   emit()
 }
