@@ -8,6 +8,7 @@ import { Landing } from './routes/Landing'
 import { Mood } from './routes/Mood'
 import { NotFound } from './routes/NotFound'
 import { Onboarding } from './routes/Onboarding'
+import { Ask } from './routes/Ask'
 import { Recovery } from './routes/Recovery'
 import { SelfCheck } from './routes/SelfCheck'
 import { Settings } from './routes/Settings'
@@ -18,6 +19,7 @@ const GUARDED = [
   { path: '/mood', element: <Mood /> },
   { path: '/self-check', element: <SelfCheck /> },
   { path: '/echo', element: <Echo /> },
+  { path: '/ask', element: <Ask /> },
   { path: '/journal', element: <Journal /> },
   { path: '/breathe', element: <Breathe /> },
   { path: '/recovery', element: <Recovery /> },
@@ -33,6 +35,7 @@ const GUARDED = [
  *   /mood        the daily check-in and its history
  *   /self-check  the validated PHQ-9 / GAD-7 questionnaires
  *   /echo        on-device semantic search across your own entries
+ *   /ask         evidence-first answers to health questions
  *   /journal     prompt, composer and earlier entries
  *   /breathe     guided breathing sessions
  *   /recovery    concussion symptom tracking and graduated return plans

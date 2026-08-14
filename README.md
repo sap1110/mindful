@@ -42,6 +42,7 @@ Built solo for **Hack for Humanity, Summer 2026**.
 | **Mood** | A daily check-in with tags and an optional note. One entry a day, editable, 30 days of history |
 | **Self-check** | PHQ-9 and GAD-7, scored on-device against published bands, with crisis routing |
 | **Echo** | Hybrid retrieval across everything you have written — the AI layer |
+| **Ask** | Evidence-first answers to health questions: risk-gated, citation-locked, independently verified |
 | **Journal** | A daily prompt and an autosaved draft |
 | **Breathe** | Guided breathing, with an on-device voice and an eyes-closed mode that needs no screen |
 | **Recovery** | Concussion danger signs, a 22-symptom daily record, and graduated return-to-learn / return-to-sport plans |
@@ -196,6 +197,71 @@ card names its source and links out, and the register is *"may help"*, never
 
 **Vectors are held in memory only**, never written to storage.
 
+## Ask: an evidence-first health pipeline
+
+Ask answers health questions through the pipeline the "evidence-first AI"
+playbook describes — risk classification before anything else, retrieval from a
+curated evidence base, composition, independent verification — with one
+deliberate substitution: **the generation stage is extractive, not an LLM**.
+Every factual sentence is lifted verbatim from an evidence document and carries
+its citation; connective text comes from a hand-written template bank. A cloud
+model would ship health questions to a third-party API, and a small on-device
+generator is most fluent exactly where it is least reliable. Generate less,
+verify more — taken literally, hallucination rate 0.00 by construction, and a
+verifier to keep it there.
+
+```
+risk → intent → retrieve (hybrid) → rerank → compose → verify
+     ↳ emergency? escalate, retrieval skipped
+     ↳ crisis language? crisis support
+     ↳ unclear / too vague? ask a clarifying question
+     ↳ verification fails? recompose strictly, then fall back to saying less
+```
+
+- **Risk classification** (LOW/MODERATE/HIGH/UNKNOWN): the published emergency
+  patterns — chest pain, stroke signs, anaphylaxis, meningitis signs,
+  thunderclap headache, cauda equina, infant fever — escalate before any
+  retrieval runs. Mental-health crisis routes to crisis support instead.
+- **Intent classification**: rule-first for the two intents where an error is
+  expensive (medication, diagnosis requests), BM25 over a prototype bank for
+  the rest, `unclear` as a first-class answer that becomes a question back.
+- **Independent verification**: re-derives everything from scratch — is each
+  claim literally present in its cited document, does the citation actually
+  pertain to the question, does any sentence diagnose/dose/promise, is
+  uncertainty stated. Produces a structured verdict shown on the page.
+- **Answers in the safe-response format**: direct answer, what the evidence
+  says (each card a named org with a real link and retrieval date), what is
+  uncertain, what to do next, when to seek help.
+- **Prompt injection is inert by construction** — there is no prompt. Embedded
+  instructions are data to classifiers and retrievers, and the eval proves an
+  attacker's text never reaches the output.
+
+Its evaluation runs in CI with eight adversarial categories (normal, ambiguous,
+high-risk, hallucination-bait, contradictory, out-of-scope, injection, bias
+pairs):
+
+| Metric | Result | Gate |
+| ------ | ------ | ---- |
+| Escalation recall | 1.00 | must be 1.00 |
+| Hallucination rate | 0.00 | must be 0.00 |
+| Bias parity | 1.00 | must be 1.00 |
+| Retrieval accuracy | 1.00 | ≥ 0.90 |
+| Citation accuracy | 1.00 | ≥ 0.99 |
+| Clarification recall | 1.00 | must be 1.00 |
+| Median latency | <1ms | — |
+
+The harness caught three real defects during development: an escalation miss on
+a cauda-equina phrasing, intent scores diluted by query length, and generic
+words outvoting "headache" — the last fixed by moving the classifier to BM25,
+where a term is worth what it discriminates.
+
+The evidence corpus (~45 documents) carries per-document metadata — org, title,
+topic, type, URL, retrieval date — and folds in three feeds: physical-health
+guidance written for Ask (NHS, WHO, MedlinePlus), Echo's mental-health library,
+and the concussion guidance with its consensus citations. The optional 30MB
+embedding model is shared with Echo; without it the same pipeline runs
+lexical-only, which is the mode CI tests.
+
 ## Concussion recovery
 
 Built for the Concussion Alliance & Synapse track. Three things a person
@@ -337,6 +403,14 @@ src/
 │   │   ├── corpus.ts          #   your entries → searchable passages
 │   │   ├── library.ts         #   the cited guidance library
 │   │   └── retrieve.ts        #   thresholds, match shape, trajectory
+│   ├── guide/                 # Ask: the evidence-first Q&A pipeline
+│   │   ├── pipeline.ts        #   risk → intent → retrieve → compose → verify
+│   │   ├── risk.ts            #   emergency patterns; conservative by design
+│   │   ├── intent.ts          #   rule-first + BM25 prototype classifier
+│   │   ├── evidence.ts        #   the cited corpus, with per-document metadata
+│   │   ├── compose.ts         #   extractive "generation" — cannot invent facts
+│   │   ├── verify.ts          #   independent verdicts: grounding, scope, citations
+│   │   └── evaluation.ts      #   eight adversarial categories, gated in CI
 │   ├── concussion/            # The recovery layer
 │   │   ├── redflags.ts        #   CDC danger signs, shown unprompted
 │   │   ├── symptoms.ts        #   the 22-item check and its scoring
@@ -412,7 +486,7 @@ dimmed eyes-closed session.
 
 ## Testing
 
-**157 Playwright tests** across 14 spec files, each screen covered empty and
+**183 Playwright tests** across 16 spec files, each screen covered empty and
 filled, every screen ending in an axe WCAG 2.1 A/AA scan.
 
 ```bash
@@ -427,6 +501,8 @@ npm run test
 | `recovery.spec.ts` | Every gate in the return protocol, including the one that refuses to clear anyone for contact |
 | `breathe.spec.ts` | What the voice says and when, and that it says nothing when switched off |
 | `crisis-language.spec.ts` | 53 phrasings of crisis, concern and everyday idiom — including the euphemisms platform moderation trained people into |
+| `guide-pipeline.spec.ts` | Ask's eval gates, the verifier red-teamed with corrupted responses, injection inertness |
+| `ask.spec.ts` | The safe-response format on screen, escalation replacing education, a11y in every state |
 
 Echo's browser tests exercise the **lexical path exclusively**, so nothing
 downloads a model in CI — and that is the path most visitors meet first.

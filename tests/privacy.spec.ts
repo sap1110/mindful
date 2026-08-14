@@ -90,6 +90,12 @@ test.describe('nothing leaves the device', () => {
     await page.getByRole('button', { name: 'Look back', exact: true }).click()
     await page.waitForTimeout(1_500)
 
+    // A health question, which is exactly the text a leak would want.
+    await page.goto('/ask')
+    await page.getByLabel('Your question').fill(`what helps with headaches after ${SECRETS.echoQuery}`)
+    await page.getByRole('button', { name: 'Ask', exact: true }).click()
+    await page.waitForTimeout(1_000)
+
     // A self-check, which is clinical data.
     await page.goto('/self-check')
     await page.waitForTimeout(500)

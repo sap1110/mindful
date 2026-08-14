@@ -25,7 +25,7 @@ import { PROFILE, PROFILE_KEY, readStore, seedProfile } from './helpers'
  * `tests/privacy.spec.ts` covers the network side. This is everything else.
  */
 
-const GUARDED = ['/home', '/mood', '/self-check', '/echo', '/journal', '/breathe', '/recovery', '/settings']
+const GUARDED = ['/home', '/mood', '/self-check', '/echo', '/ask', '/journal', '/breathe', '/recovery', '/settings']
 
 /** Everything in every storage medium this origin can reach. */
 async function inspectStorage(page: Page) {

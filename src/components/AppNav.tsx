@@ -1,5 +1,6 @@
 import {
   Brain,
+  MessageCircleQuestion,
   ClipboardCheck,
   History,
   House,
@@ -16,6 +17,7 @@ const ITEMS = [
   { to: '/mood', label: 'Mood', icon: Smile },
   { to: '/self-check', label: 'Check', icon: ClipboardCheck },
   { to: '/echo', label: 'Echo', icon: History },
+  { to: '/ask', label: 'Ask', icon: MessageCircleQuestion },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/breathe', label: 'Breathe', icon: Wind },
   { to: '/recovery', label: 'Recovery', icon: Brain },

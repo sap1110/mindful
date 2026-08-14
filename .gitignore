@@ -44,3 +44,6 @@ playwright-report/
 
 # Local build-agent scratch
 .bolter-task.md
+
+# Local planning documents
+evidence_first_ai_health_guidance_prd*.md
