@@ -1,14 +1,16 @@
 # Mindful
 
-A calm, private mental-health companion that runs entirely in the browser.
-No backend, no account, no analytics, no network calls — including for the AI.
+A private mental-health and concussion-recovery companion that runs entirely in
+the browser. No backend, no account, no analytics, and no runtime network call —
+including for the AI.
 
 Built solo for **Hack for Humanity, Summer 2026**.
 
-> **Mindful is not medical advice.** It offers reflective self-care prompts and
-> validated screening questionnaires. It does not diagnose, treat, or replace
-> care from a qualified professional. The disclaimer renders on every screen,
-> not buried in a footer.
+> **Mindful is not medical advice.** It offers reflective self-care prompts,
+> validated screening questionnaires, and published recovery guidance from named
+> health bodies. It does not diagnose, treat, clear anyone to return to sport, or
+> replace care from a qualified professional. The disclaimer renders on every
+> screen.
 
 ---
 
@@ -17,6 +19,7 @@ Built solo for **Hack for Humanity, Summer 2026**.
 - [What it does](#what-it-does)
 - [The privacy model](#the-privacy-model)
 - [How the AI works](#how-the-ai-works)
+- [Concussion recovery](#concussion-recovery)
 - [Not a diagnosis](#not-a-diagnosis)
 - [Getting started](#getting-started)
 - [Scripts](#scripts)
@@ -38,36 +41,52 @@ Built solo for **Hack for Humanity, Summer 2026**.
 | **Home** | Your space, with a greeting shaped by the profile |
 | **Mood** | A daily check-in with tags and an optional note. One entry a day, editable, 30 days of history |
 | **Self-check** | PHQ-9 and GAD-7, scored on-device against published bands, with crisis routing |
-| **Echo** | Semantic search across everything you have written — the AI layer |
+| **Echo** | Hybrid retrieval across everything you have written — the AI layer |
 | **Journal** | A daily prompt and an autosaved draft |
-| **Breathe** | Guided breathing, with a text guide for `prefers-reduced-motion` |
+| **Breathe** | Guided breathing, with an on-device voice and an eyes-closed mode that needs no screen |
+| **Recovery** | Concussion danger signs, a 22-symptom daily record, and graduated return-to-learn / return-to-sport plans |
 | **Settings** | JSON export, two-step erase, and a labelled sample-data toggle |
 
 ## The privacy model
 
 Everything lives in `localStorage`. There is no server, so there is nowhere for
-your data to go.
+the data to go.
 
 - **No backend, no account, no analytics.** "Signed in" is a completed profile
   object on the device.
-- **Export** hands you the whole dataset as JSON. **Erase** is a two-step
-  confirmation that clears every key and returns you to onboarding.
-- **The one network request** in the entire application is the optional,
-  explicitly-consented AI model download — weights coming *down*, never your
-  data going *up*. See below.
-- Sample data is labelled as sample wherever it appears, and removing it
-  removes exactly the records it added.
+- **A Content-Security-Policy enforces it.** `connect-src 'self'` means
+  exfiltrating an entry is a request the browser blocks, not a code-review
+  question. `form-action 'none'`, `object-src 'none'`, `base-uri 'self'` and
+  `font-src 'self'` back it up.
+- **Fonts are self-hosted.** Loading them from a CDN sent an IP address, a user
+  agent and a referring URL to a third party on every page load, including the
+  page that promises none of that happens.
+- **The one network request** in the application is the optional,
+  explicitly-consented AI model download — weights coming *down*, never data
+  going *up*. Its hosts are named individually in the policy.
+- **Free-text fields set `spellcheck="false"` and `autocomplete="off"`.**
+  Enhanced spellcheck uploads what is typed to be checked; form history keeps
+  copies outside the namespace that "erase everything" sweeps.
+- **Export** hands over the whole dataset as JSON, generated in the page.
+  **Erase** is a two-step confirmation that clears every key and re-gates the app
+  without a reload.
+- **Nothing in cookies, sessionStorage or IndexedDB.** Verified by the suite.
+
+Two test suites hold this up rather than describing it. `tests/privacy.spec.ts`
+drives a full session of real use — a mood note, a journal entry, a search, a
+self-check, a voice-guided breathing session, an export — while recording every
+request the browser makes, and fails on any request to any other origin.
+`tests/security.spec.ts` covers the rest: the profile gate against URL
+manipulation, storage residue, stored XSS, and referrer leakage.
 
 ## How the AI works
 
 Echo **retrieves; it does not generate.** The model turns text into vectors and
-that is the whole of its job. There is no language model writing sentences
-about your mental health — so there is no hallucination surface, no invented
-diagnosis, and nothing to police on the way out.
+that is the whole of its job. There is no language model writing sentences about
+anyone's mental health, so there is no hallucination surface.
 
 Describe how things are right now, and Echo finds the entries you have already
-written that read like this one. The claim it makes is deliberately narrow, and
-every part of it is evidence rather than interpretation:
+written that read like this one:
 
 > You have written something like this before · here it is, in your words ·
 > here is what the fortnight after it looked like
@@ -81,52 +100,159 @@ every part of it is evidence rather than interpretation:
 | Can hallucinate | Yes, about someone's mental health | **No — it generates nothing** |
 | Uses your data | Not unless you also build this | **It is the entire feature** |
 
-The deciding argument was the last row. A generic chatbot is the least
-differentiated thing a private journalling app could ship. Retrieval answers a
-question only Mindful *can* answer, precisely because your journal is already on
-the device — the privacy constraint becomes the advantage.
+Retrieval answers a question only Mindful *can* answer, precisely because the
+journal is already on the device. It is also therapeutically grounded rather
+than decorative: depression's cognitive signature is *"it has always been like
+this and it always will be"*, and the strongest counter to that is a person's
+own record.
 
-It is also therapeutically grounded rather than decorative. Depression's
-cognitive signature is *"it has always been like this and it always will be"*,
-and the strongest counter to that is not reassurance — it is your own record.
+### The pipeline
 
-### The parts that took the thought
+Seven stages, each with one job, a defined input and output, and its own tests.
 
-**Safety runs first, and without the model.** Risk assessment happens on the
-input before any search, and does not depend on a download having succeeded. An
-acute disclosure *replaces* the results rather than appearing above them —
-answering "I don't want to be here anymore" with a list of old diary entries
-would be a grotesque response to what was just said.
+```
+guard → expand → retrieve → fuse → aggregate → rerank → verify
+```
 
-**The trajectory is allowed to deliver bad news.** If your check-ins fell after
-a similar entry, Echo says so. Reporting only the times things improved would be
-a comforting lie, and it is exactly the case where the honest next step is a
-conversation with a person rather than reassurance from a browser tab.
+1. **guard** — risk assessment on the input, before anything is searched, with
+   no dependency on the model having downloaded.
+2. **expand** — stemming, contraction folding, and a curated near-synonym set
+   applied to the query only.
+3. **retrieve** — two independent rankings: BM25 over terms, cosine over
+   embeddings. Each applies its own relevance floor.
+4. **fuse** — reciprocal rank fusion, by position rather than score. Cosine and
+   BM25 are different scales; normalising them would invent a comparison that
+   does not exist.
+5. **aggregate** — chunks fold back into the entry they came from, max-pooled.
+6. **rerank** — maximal marginal relevance, so one bad week written up four
+   times cannot fill the answer. The top match is never displaced.
+7. **verify** — see below.
 
-**It will not claim a pattern it has not found.** Cosine similarity always
-returns a nearest neighbour, so there is a relevance floor. Below it, Echo says
-nothing matched rather than dressing noise up as insight.
+Both retrievers run on-device. With no model downloaded, the same seven stages
+run with one arm instead of two — a supported mode, and the one most people meet
+first.
 
-**Two engines, and the free one is not a consolation prize.** Word-overlap
-search works on any browser with no download at all. The model upgrades it from
-matching vocabulary to matching meaning. The interface always names which one
-answered, because a keyword pass that found nothing is weak evidence of absence.
+### The verification layer
 
-**Cold start is solved with citations, not invention.** A library of guidance
-from the NHS, NIMH, MedlinePlus, WHO and NCCIH means someone with no history yet
-still gets something real. Mindful makes no health claims of its own: every card
-names its source and links out, and the register is *"may help"*, never *"will
-fix"*. One card reports NCCIH's own caveats about the evidence base, including
-that roughly 8% of participants in a 2020 review had a negative effect from
-practising meditation.
+Nothing reaches the screen until it passes:
 
-That library was fetched at build time and frozen into the bundle. A live
-content feed would have quietly turned every reflection into a network request
-carrying whatever the person had just typed.
+| Check | Guarantee |
+| ----- | --------- |
+| **provenance** | Every result names a record that is in storage *now*, not when the index was built |
+| **verbatim** | The text shown is a literal substring of what the person wrote — a stale index or bad chunk boundary cannot put words in anyone's mouth |
+| **support** | A claim about what happened next survives only while the check-ins backing it do |
+| **attribution** | Library cards must carry an allowlisted source, and only one card per source is shown |
+| **resurfacing** | If a search returns something written in acute distress, support is offered alongside it |
 
-**Vectors are held in memory only**, never written to storage. They are derived
-from journal text, so a cached copy on disk would be one more thing the erase
-button has to destroy.
+Dropped results are recorded with a reason rather than silently discarded. Each
+surviving result explains itself on the page — same words, related words, close
+in meaning — and the pipeline publishes its stage-by-stage working.
+
+### Measured, not eyeballed
+
+`src/lib/echo/evaluation.ts` holds a fixed corpus, a query set with known right
+answers, and two metrics. It runs in the test suite with no model and no browser.
+
+| Slice | recall@3 | MRR |
+| ----- | -------- | --- |
+| Overall | 0.85 | 0.85 |
+| Plain prose | 1.00 | 1.00 |
+| Clipped phone typing | 1.00 | 1.00 |
+| Second-language phrasing | 1.00 | 1.00 |
+| Metaphor | 0.25 | 0.25 |
+
+The register slices are a fairness check, not a curiosity: a retriever that
+scores well on tidy prose and badly on how people actually type works better for
+people who write like the person who built it. The parity gap is asserted in CI.
+The metaphor slice is the known limit of lexical matching — it stays in the
+report rather than being quietly excluded, and it is what the dense arm is for.
+
+The harness earned itself immediately: it caught the confidence floor discarding
+an entry that said *"lying awake"* in answer to *"I cannot sleep"*, because only
+literal word matches counted. Recall@3 went from 0.75 to 0.85 and the three
+literal registers from 0.88/1.00/0.75 to parity.
+
+### Other decisions that took the thought
+
+**Safety runs first, and without the model.** An acute disclosure *replaces* the
+results rather than appearing above them.
+
+**The trajectory is allowed to deliver bad news.** If check-ins fell after a
+similar entry, Echo says so.
+
+**It will not claim a pattern it has not found.** Below the relevance floor, Echo
+says nothing matched rather than dressing a nearest neighbour up as insight.
+
+**Cold start is solved with citations, not invention.** A frozen library from the
+NHS, NIMH, MedlinePlus, WHO and NCCIH covers someone with no history yet. Every
+card names its source and links out, and the register is *"may help"*, never
+*"will fix"*.
+
+**Vectors are held in memory only**, never written to storage.
+
+## Concussion recovery
+
+Built for the Concussion Alliance & Synapse track. Three things a person
+recovering from a head injury needs and rarely has.
+
+**The danger signs, first and unprompted.** The CDC HEADS UP list, unchanged, at
+the top of the screen on every visit. No scoring and no risk band: one sign is
+the whole threshold, and the response is the same every time.
+
+**A symptom record worth taking to an appointment.** The 22-symptom evaluation
+used in concussion care, rated 0–6, stored per item so three weeks of checks show
+which symptoms moved. A rising total or symptoms past four weeks prompts a
+conversation, not a verdict.
+
+**Graduated return plans, with the rules enforced in code.** Four steps back to
+learning or work, six back to sport, from the Amsterdam 2023 consensus, with
+learning taking precedence.
+
+| Rule | Implementation |
+| ---- | -------------- |
+| Minimum 24 hours per stage | The advance button does not exist until the clock is up, with the reason shown in its place |
+| Mild, brief symptom increase only (≤2 points on a 0–10 scale, settling within an hour) | Reporting worse than that withdraws the offer to advance |
+| Baseline symptoms before contact stages | Gated from stage 4 |
+| Clinician clearance before full contact | Gated from stage 5, recorded as something a clinician said — never something the app decided |
+| Symptoms returning during contact stages | Drops to stage 3, not one step down into another chance to be hit |
+
+Going backwards is a button the same size as going forwards.
+
+Every clinical line names who said it, links to them, is paraphrased rather than
+reproduced, and carries the date it was checked. That includes the guidance that
+changed: prolonged strict rest is no longer recommended, and light aerobic
+exercise below the symptom threshold after the first 48 hours speeds recovery.
+
+The screen ends with what it cannot do — it does not diagnose, it never clears
+anyone to play, it knows nothing about medical history or medication, and a
+clinician's plan overrides it.
+
+The connections to the rest of the app are clinical rather than promotional.
+Sleep and mood predict slow recovery and Mindful already tracks both; light
+sensitivity makes screens unusable, which is what the eyes-closed breathing mode
+is for.
+
+## Breathing, with the screen closed
+
+Sensitivity to light is among the most common concussion symptoms and a common
+feature of migraine and anxiety, which makes most self-care apps unusable at
+exactly the moment they are needed. The breathing screen can dim itself entirely
+and hand pacing to a voice: the whole surface becomes one pause target, Escape
+stops, and a screen wake lock keeps the device from sleeping through a session
+nobody is touching.
+
+The voice is **on-device only**. Every hosted text-to-speech API would ship the
+words to a server, so it uses `SpeechSynthesis` and takes only voices the
+platform reports as `localService` — cloud-backed voices are filtered out rather
+than deprioritised, and where no local voice exists the guide reports itself
+unavailable instead of quietly using a remote one.
+
+Safety ships with it: the cautions for the chosen rhythm are on screen before
+Begin, the eyes-closed checks are confirmed once before the first dark session,
+and the dizziness reminder is spoken at the start of every session. Provenance is
+stated per rhythm — the NHS describes the 5-5 one; the two that hold the breath
+say plainly that they are widely taught rather than borrowing an authority they
+do not have.
 
 ## Not a diagnosis
 
@@ -135,8 +261,7 @@ bands, but a score is not a condition. Every result says so, in those words.
 
 PHQ-9 item 9 — thoughts of self-harm — is tracked as a signal independent of the
 total. Someone can score 1 overall and still have answered it, so when it is
-flagged the crisis resources render *above* the score rather than below it. That
-low-score case is exactly what a score-first layout would bury.
+flagged the crisis resources render *above* the score rather than below it.
 
 Crisis resources are permanently present on the self-check and Echo screens, not
 something you have to score badly to be shown.
@@ -169,35 +294,55 @@ To try it with data in it, open **Settings → Load sample data**.
 src/
 ├── App.tsx                    # Routes, all gated behind the on-device profile
 ├── main.tsx                   # BrowserRouter + ProfileProvider
+├── fonts.css                  # Self-hosted @font-face — no CDN
 ├── index.css                  # Design tokens, base styles, reduced-motion
 ├── theme.ts                   # The same tokens for TypeScript
 ├── lib/
 │   ├── storage.ts             # The localStorage layer: read, write, export, erase
 │   ├── screener.ts            # PHQ-9 / GAD-7 items, bands, scoring, cadence
 │   ├── crisis.ts              # Helplines and the emergency note
+│   ├── voice.ts               # On-device speech; filters out cloud voices
+│   ├── breathCues.ts          # What the spoken guide says, in one reviewable place
+│   ├── breathingSafety.ts     # Per-rhythm cautions, provenance, eyes-closed checks
 │   ├── echo/                  # The AI layer
+│   │   ├── pipeline.ts        #   the seven stages, in order
 │   │   ├── safety.ts          #   risk assessment — runs first, needs no model
+│   │   ├── verify.ts          #   provenance, verbatim, attribution, resurfacing
+│   │   ├── evaluation.ts      #   fixed eval set, recall@3 / MRR, register parity
+│   │   ├── keyword.ts         #   tokenisation and BM25
+│   │   ├── expand.ts          #   curated query expansion
+│   │   ├── fuse.ts            #   reciprocal rank fusion + MMR reranking
 │   │   ├── embeddings.ts      #   transformers.js loader, lazy and consented
 │   │   ├── corpus.ts          #   your entries → searchable passages
 │   │   ├── library.ts         #   the cited guidance library
-│   │   ├── retrieve.ts        #   ranking, relevance floor, trajectory
-│   │   └── keyword.ts         #   the no-model fallback search
+│   │   └── retrieve.ts        #   thresholds, match shape, trajectory
+│   ├── concussion/            # The recovery layer
+│   │   ├── redflags.ts        #   CDC danger signs, shown unprompted
+│   │   ├── symptoms.ts        #   the 22-item check and its scoring
+│   │   ├── protocol.ts        #   return-to-learn / return-to-sport, and the gates
+│   │   └── evidence.ts        #   sources, guidance, and stated limitations
 │   ├── profile.ts · mood.ts · breathing.ts · prompts.ts · date.ts · cn.ts · motion.ts
 │   └── sampleData.ts          # The labelled, removable demo dataset
 ├── context/                   # ProfileProvider + context object
-├── hooks/                     # useProfile, useMindfulData, useBreathingSession, useEcho
+├── hooks/                     # useProfile, useMindfulData, useEcho, useBreathingSession,
+│                              # useBreathCues, useVoiceGuide, useWakeLock
 ├── components/
 │   ├── PageShell.tsx          # Skip link, header, <main>, disclaimer
 │   ├── RequireProfile.tsx     # The on-device gate
 │   ├── AppNav.tsx             # The persistent bottom bar
-│   ├── echo/ · screener/ · crisis/ · mood/ · journal/ · breathe/
-│   └── ui/                    # Button, Card, Chip, TextField, ChoiceTile, …
+│   ├── echo/ · screener/ · crisis/ · mood/ · journal/ · breathe/ · concussion/
+│   └── ui/                    # Button, Card, Chip, Overlay, TextField, ChoiceTile, …
 └── routes/                    # One file per screen
 ```
 
 **State.** `useSyncExternalStore` over `localStorage` rather than a context
 provider — storage *is* the source of truth, so a write from any screen (or
 another tab) reaches every subscriber without a provider sitting above them.
+
+**Modals** render through a portal, mark the app root `inert`, and hide it
+outright when the overlay is opaque. That last part is not tidiness: an overlay
+that only paints over the page leaves the text beneath it on screen as far as a
+contrast checker is concerned.
 
 ## Design system
 
@@ -210,53 +355,58 @@ stay in step:
 | `tailwind.config.js` | Tailwind theme, resolving to those variables |
 | `src/theme.ts` | The same tokens for values that cross into JS |
 
-**Palette.** A warm paper base (`cream`), grounded `sage` as primary, cool
-`mist` and soft `lavender` supporting, and a single warm `clay` accent — at most
-one accented element per screen. Never inline hex.
+**Palette.** A warm paper base (`cream`), grounded `sage` as primary, cool `mist`
+and soft `lavender` supporting, and a single warm `clay` accent — at most one
+accented element per screen. Never inline hex.
 
-**Type.** Fraunces (`SOFT 30 / WONK 1`) for display, DM Sans for UI. Serif
-carries statements; sans carries labels.
+**Type.** Fraunces (`SOFT 30 / WONK 1`) for display, DM Sans for UI, both
+self-hosted as variable fonts.
 
-**Motion.** Everything should feel like breathing out: short travel, long easing
-tails, no overshoot. `prefers-reduced-motion` disables all of it globally.
+**Motion.** Short travel, long easing tails, no overshoot.
+`prefers-reduced-motion` disables all of it globally — and on the breathing
+screen *replaces* the animation with a text guide paced by the same clock rather
+than simply switching it off.
 
 ## Accessibility
 
 WCAG 2.1 A/AA is verified, not assumed. The suite fails the build on any axe
-violation, on every screen, in both empty and filled states.
+violation, on every screen, in both empty and filled states — including the
+dimmed eyes-closed session.
 
 - Every colour pair is contrast-checked, with ratios noted beside the tokens.
-  The suite is what caught `text-subtle` sitting at 4.43:1 where the floating
-  nav composites over a sunken card.
 - One focus treatment app-wide (a mist ring, offset), plus a skip link.
-- Choice tiles and screener options are real `<input type="radio">` /
+- Choice tiles, chips and screener options are real `<input type="radio">` /
   `type="checkbox"` elements, visually hidden but focusable — so roles, checked
-  state and arrow-key movement come from the platform rather than from us.
-- Each screener item is a `<fieldset>` whose `<legend>` is the question, so the
-  four options read as a group rather than as orphaned words.
+  state and arrow-key movement come from the platform.
+- Symptom ratings carry their word anchor in the accessible name: "4 out of 6 —
+  Moderate", never a bare glyph.
+- Each screener item is a `<fieldset>` whose `<legend>` is the question.
 - Focus moves to the incoming heading on every onboarding, self-check and Echo
-  stage change.
-- Errors use `aria-describedby` / `aria-invalid` inside live regions.
-- Nothing is signalled by colour alone: score bands are named in words, and bars
-  only repeat what the text already says.
+  stage change, and into and back out of every modal.
+- Nothing is signalled by colour alone.
+- When the spoken guide is on, the on-screen live region steps aside — hearing
+  the same step twice, once from the app and once from a screen reader, would be
+  worse than either.
 
 ## Testing
 
-**54 Playwright tests**, each screen covered empty and filled, every one ending
-in an axe WCAG 2.1 A/AA scan.
+**101 Playwright tests** across 13 spec files, each screen covered empty and
+filled, every screen ending in an axe WCAG 2.1 A/AA scan.
 
 ```bash
 npm run test
 ```
 
-Echo's tests exercise the **keyword path exclusively**, so nothing downloads a
-model in CI — and that is the path most visitors meet first. They cover the
-no-download experience, the download disclosure, a real match with its
-trajectory, the refusal to invent a match, the crisis interrupt both with and
-without history, and the cold-start library path.
+| Suite | What it holds up |
+| ----- | ---------------- |
+| `privacy.spec.ts` | No request to any origin but this one, across a full session of real use |
+| `security.spec.ts` | The profile gate against URL manipulation, storage residue, stored XSS, referrer leakage |
+| `echo-retrieval.spec.ts` | recall@3, MRR, register parity, ranking mechanics, and every verification rule — in Node, with no model |
+| `recovery.spec.ts` | Every gate in the return protocol, including the one that refuses to clear anyone for contact |
+| `breathe.spec.ts` | What the voice says and when, and that it says nothing when switched off |
 
-One test asserts document order directly: on a risk-flagged screener result, the
-crisis heading must precede the score heading.
+Echo's browser tests exercise the **lexical path exclusively**, so nothing
+downloads a model in CI — and that is the path most visitors meet first.
 
 ## Attribution
 
@@ -274,10 +424,26 @@ Both were developed by Drs Robert L. Spitzer, Janet B.W. Williams and Kurt
 Kroenke, with an educational grant from Pfizer Inc. No permission is required to
 reproduce, translate, display or distribute them.
 
+### Concussion guidance
+
+Paraphrased rather than reproduced, cited in the app, checked 2026-08-14.
+
+| Source | Used for |
+| ------ | -------- |
+| CDC HEADS UP | The danger signs, verbatim as a list |
+| Amsterdam consensus statement 2023 (Patricios et al., *BJSM*) | Graduated return-to-learn and return-to-sport strategies, stage rules, persisting-symptom definition |
+| Concussion Alliance | Sleep, mood and recovery summaries |
+| Macnow et al., *JAMA Pediatrics* 2021 | Screen-time guidance in the first 48 hours |
+| Leddy et al. | Sub-symptom-threshold aerobic exercise |
+
+The 22-item symptom evaluation is the post-concussion symptom scale used in
+concussion care. The SCAT itself is the Concussion in Sport Group's instrument
+and is not reproduced here.
+
 ### Echo's guidance library
 
-Retrieved 2026-08-13, distilled, and frozen into the bundle. Every card names
-its source in the copy and links to the original.
+Retrieved 2026-08-13, distilled, and frozen into the bundle. Every card names its
+source in the copy and links to the original.
 
 | Source | Licence |
 | ------ | ------- |
@@ -300,18 +466,21 @@ Mindful.
 
 ### Other
 
-Typefaces: Fraunces and DM Sans, both SIL Open Font License. Icons: lucide.
+Typefaces: Fraunces and DM Sans, both under the SIL Open Font License, served
+from `public/fonts/` with their licences alongside. Icons: lucide.
 
 ## Conventions
 
 - Style with Tailwind utilities. New colours go in `index.css` **and**
   `tailwind.config.js` **and** `theme.ts` — never inline hex.
 - Screener item wording, options and band thresholds are not editorial copy.
-  Changing them makes the published scoring bands meaningless.
+  Changing them makes the published scoring bands meaningless. The same applies
+  to the concussion stage rules and thresholds.
 - Echo retrieves; it never generates. If a change would have the app write a
   sentence about someone's mental health rather than quote one of theirs or an
   attributed source, it is the wrong change.
-- No runtime network call, ever — including for content.
+- The app never clears anyone to return to sport.
+- No runtime network call, ever — including for content and fonts.
 - Any screen that could read as health guidance renders `<Disclaimer />`;
   `PageShell` does it for you.
 - Run `npm run verify` before pushing.
@@ -319,5 +488,5 @@ Typefaces: Fraunces and DM Sans, both SIL Open Font License. Icons: lucide.
 ## Licence
 
 MIT — see [LICENSE](LICENSE). This covers Mindful's own source code; the
-third-party content and models it references carry their own terms, listed
-under [Attribution](#attribution).
+third-party content and models it references carry their own terms, listed under
+[Attribution](#attribution).
