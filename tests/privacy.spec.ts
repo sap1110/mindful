@@ -105,6 +105,9 @@ test.describe('nothing leaves the device', () => {
     await page.goto('/settings')
     await page.waitForTimeout(500)
 
+    // Guard against a green tick that only means the recorder saw nothing: a
+    // walk of seven screens loads scripts, styles and fonts.
+    expect(seen.urls.length).toBeGreaterThan(10)
     expect(offOrigin(seen.urls)).toEqual([])
 
     // Belt and braces: even a same-origin request must not be carrying it.

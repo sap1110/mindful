@@ -21,6 +21,17 @@ export interface TextAreaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaE
  * The multi-line sibling of `TextField`: same label wiring, same focus
  * treatment, same rounded surface. Used for the journal composer and the
  * optional note on a mood check-in.
+ *
+ * Spellcheck and autocomplete are off by default, which is a privacy decision
+ * rather than a stylistic one. Browsers with enhanced spellcheck enabled send
+ * what you type to the vendor's servers to be checked — a well-documented leak
+ * that would quietly turn "nothing you write is sent anywhere" into a lie, in a
+ * box people use to write the most private thing in the app. Form-history
+ * autocomplete is off for a related reason: it would store diary text outside
+ * this app's namespace, where the erase button cannot reach it.
+ *
+ * Both are ordinary props, so a caller with a field that needs them can pass
+ * them back on.
  */
 export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
   { label, hint, hideLabel, status, className, rows = 6, ...rest },
@@ -48,6 +59,8 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
         ref={ref}
         id={id}
         rows={rows}
+        spellCheck={false}
+        autoComplete="off"
         aria-describedby={hint ? hintId : undefined}
         className={cn(
           'w-full resize-y rounded-2xl border border-border bg-surface px-4.5 py-3.5 text-base leading-relaxed text-text',

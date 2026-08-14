@@ -160,9 +160,17 @@ test.describe('spoken guide', () => {
 
   test('says nothing at all when the guide is off', async ({ page }) => {
     await page.goto('/breathe')
+
+    // A voice is available and simply not switched on — otherwise this test
+    // would pass just as happily on a page with no speech engine at all.
+    await expect(page.getByText('Guide me by voice')).toBeVisible()
+    await expect(page.getByRole('checkbox', { name: 'Guide me by voice' })).not.toBeChecked()
+
     await page.getByRole('button', { name: 'Begin' }).click()
     await page.waitForTimeout(5_000)
 
+    // The session really did run; it just ran silently.
+    await expect(page.getByText(/left in this step/)).toBeVisible()
     expect(await spokenLines(page)).toEqual([])
   })
 })

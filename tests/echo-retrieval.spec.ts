@@ -4,6 +4,9 @@ import { buildCorpus } from '../src/lib/echo/corpus'
 import { runPipeline } from '../src/lib/echo/pipeline'
 import { reciprocalRankFusion, maximalMarginalRelevance, tokenSimilarity } from '../src/lib/echo/fuse'
 import { bm25Ranking, buildLexicalIndex, tokenize, tokenList } from '../src/lib/echo/keyword'
+import { LIBRARY } from '../src/lib/echo/library'
+import { MIN_CONFIDENCE } from '../src/lib/echo/pipeline'
+import { verifyResult } from '../src/lib/echo/verify'
 
 /**
  * Echo's retrieval, measured rather than eyeballed.
@@ -132,14 +135,32 @@ test.describe('the verification layer', () => {
   })
 
   test('shows at most one card from any single source', () => {
-    const answer = runPipeline({
-      query: 'I feel anxious and cannot sleep and everything is too much',
-      passages: [],
-      data: { journal: [], moods: [], breathing: [], screeners: [] },
-    })
+    // Asserting on a live query would pass vacuously whenever fewer than two
+    // cards come back, so the rule is put under real pressure instead: three
+    // candidates, two of them from the same body.
+    const sameSource = LIBRARY.filter((card) => card.source === 'nhs').slice(0, 2)
+    const otherSource = LIBRARY.find((card) => card.source !== 'nhs')
+    expect(sameSource).toHaveLength(2)
+    expect(otherSource).toBeDefined()
 
-    const sources = (answer.result?.library ?? []).map((match) => match.card.source)
-    expect(new Set(sources).size).toBe(sources.length)
+    const verified = verifyResult(
+      {
+        personal: [],
+        library: [...sameSource, otherSource!].map((card) => ({
+          kind: 'library' as const,
+          card,
+          score: 0.8,
+        })),
+      },
+      { journal: [], moods: [], breathing: [], screeners: [], concussion: [] },
+      MIN_CONFIDENCE,
+    )
+
+    expect(verified.library).toHaveLength(2)
+    expect(new Set(verified.library.map((match) => match.card.source)).size).toBe(2)
+    expect(verified.dropped).toContainEqual(
+      expect.objectContaining({ reason: 'source-repeated', detail: 'nhs' }),
+    )
   })
 
   test('a crisis disclosure never reaches the retriever', () => {
