@@ -22,13 +22,56 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="mobile-web-app-capable" content="yes" />
 
-    <!-- Type pairing: Fraunces (soft optical serif) for display, DM Sans for UI. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap"
+    <!--
+      The privacy promise, enforced by the browser rather than by good manners.
+
+      Mindful tells people that what they write never leaves their device. A
+      promise like that is only worth the mechanism behind it, so this policy
+      makes the leak impossible rather than merely unintended: there is no
+      origin this page is allowed to send anything to.
+
+        connect-src 'self'  no fetch, XHR, WebSocket, SSE or beacon to any
+                            other origin — the one line that makes exfiltration
+                            of a journal entry a blocked request instead of a
+                            code review question. The embedding model's weights
+                            are the sole exception, and are named explicitly
+                            below rather than covered by a wildcard.
+        form-action 'none'  nothing can be POSTed anywhere, by any route.
+        object-src 'none'   no plugins, no legacy embedding.
+        base-uri 'self'     an injected <base> cannot re-point relative URLs.
+        font-src 'self'     fonts are served from here; see src/fonts.css for
+                            why they no longer come from a CDN.
+        img-src             'self' plus data:/blob:, which the export download
+                            and inline SVGs need. No remote images means no
+                            tracking pixel can be smuggled into any content.
+
+      'wasm-unsafe-eval' and blob: workers are what ONNX Runtime needs to run
+      the embedding model on-device. They widen script execution, not network
+      reach — the point of running the model here is that the alternative is
+      sending the text to somebody's API.
+
+      Kept as a meta tag so it travels with the app to any static host. Where a
+      real server is in front of it, the same policy belongs in a response
+      header, along with frame-ancestors, which meta cannot express.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self' 'wasm-unsafe-eval';
+               style-src 'self' 'unsafe-inline';
+               font-src 'self';
+               img-src 'self' data: blob:;
+               media-src 'self' blob:;
+               worker-src 'self' blob:;
+               connect-src 'self' blob: https://huggingface.co https://cdn-lfs.hf.co https://cdn-lfs-us-1.hf.co https://cas-bridge.xethub.hf.co;
+               form-action 'none';
+               frame-src 'none';
+               object-src 'none';
+               base-uri 'self'"
     />
+
+    <!-- Nothing is sent anywhere, so nothing should carry a referrer either. -->
+    <meta name="referrer" content="no-referrer" />
 
     <title>Mindful — a calmer place to check in</title>
   </head>
