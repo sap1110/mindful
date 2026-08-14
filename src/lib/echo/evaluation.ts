@@ -178,6 +178,12 @@ export interface EvalReport {
   /** Mean reciprocal rank — rewards being right *and* first. */
   mrr: number
   byRegister: Record<Register, { recall: number; mrr: number; count: number }>
+  /**
+   * Median wall-clock per query for the full lexical pipeline, index build
+   * included. Reported so a change that makes retrieval slow enough to feel
+   * shows up as a number in CI output, not as a complaint later.
+   */
+  medianLatencyMs: number
 }
 
 /**
@@ -193,8 +199,11 @@ export function evaluate(queries: readonly EvalQuery[] = EVAL_QUERIES): EvalRepo
   const data = evaluationData()
   const passages = buildCorpus(data)
 
+  const latencies: number[] = []
   const outcomes: QueryOutcome[] = queries.map((query) => {
+    const started = performance.now()
     const answer = runPipeline({ query: query.text, passages, data })
+    latencies.push(performance.now() - started)
     const returned = (answer.result?.personal ?? []).map((match) => match.passage.entryId)
     const index = returned.indexOf(query.expected)
     return { query, rank: index === -1 ? null : index + 1, returned }
@@ -218,13 +227,16 @@ export function evaluate(queries: readonly EvalQuery[] = EVAL_QUERIES): EvalRepo
   ) as EvalReport['byRegister']
 
   const overall = score(outcomes)
-  return { outcomes, recall: overall.recall, mrr: overall.mrr, byRegister }
+  const sortedLatencies = [...latencies].sort((a, b) => a - b)
+  const medianLatencyMs = sortedLatencies[Math.floor(sortedLatencies.length / 2)] ?? 0
+
+  return { outcomes, recall: overall.recall, mrr: overall.mrr, byRegister, medianLatencyMs }
 }
 
 /** A readable table, printed by the test so a regression is legible. */
 export function formatReport(report: EvalReport): string {
   const lines = [
-    `overall   recall@3 ${report.recall.toFixed(2)}   MRR ${report.mrr.toFixed(2)}`,
+    `overall   recall@3 ${report.recall.toFixed(2)}   MRR ${report.mrr.toFixed(2)}   median ${report.medianLatencyMs.toFixed(1)}ms/query`,
     ...Object.entries(report.byRegister).map(
       ([register, scores]) =>
         `  ${register.padEnd(16)} recall@3 ${scores.recall.toFixed(2)}   MRR ${scores.mrr.toFixed(2)}   (${scores.count})`,

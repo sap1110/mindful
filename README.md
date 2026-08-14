@@ -115,7 +115,10 @@ guard → expand → retrieve → fuse → aggregate → rerank → verify
 ```
 
 1. **guard** — risk assessment on the input, before anything is searched, with
-   no dependency on the model having downloaded.
+   no dependency on the model having downloaded. Written in the language people
+   actually use — contractions folded, and the moderation-era euphemisms
+   ("kms", "unalive") caught alongside the clinical phrasing — and held up by a
+   53-case battery of acute, concerning, and deliberately benign phrasings.
 2. **expand** — stemming, contraction folding, and a curated near-synonym set
    applied to the query only.
 3. **retrieve** — two independent rankings: BM25 over terms, cosine over
@@ -161,6 +164,9 @@ answers, and two metrics. It runs in the test suite with no model and no browser
 | Second-language phrasing | 1.00 | 1.00 |
 | Metaphor | 0.25 | 0.25 |
 
+The harness also reports median latency per query, so a change that makes
+retrieval slow enough to feel shows up as a number in CI output.
+
 The register slices are a fairness check, not a curiosity: a retriever that
 scores well on tidy prose and badly on how people actually type works better for
 people who write like the person who built it. The parity gap is asserted in CI.
@@ -202,11 +208,26 @@ the whole threshold, and the response is the same every time.
 **A symptom record worth taking to an appointment.** The 22-symptom evaluation
 used in concussion care, rated 0–6, stored per item so three weeks of checks show
 which symptoms moved. A rising total or symptoms past four weeks prompts a
-conversation, not a verdict.
+conversation, not a verdict. A one-click **printable clinician summary** turns
+the record into the sheet an appointment actually starts from: totals by day,
+the domain split, the most affected symptoms, and where the person is on the
+return ladder — dry by design, because the reading belongs to the clinician.
+
+**The neuroscience, because understanding it is itself treatment.** Trial
+evidence (Ponsford et al., 2002) found that early education about concussion —
+what the symptoms are, why they happen, that they usually resolve — reduces how
+long they last. So the mechanisms behind every rule are on the page: the
+neurometabolic cascade and the energy crisis (Giza & Hovda), the vulnerability
+window behind the contact gates, why sub-threshold exercise restores regulation
+where pushing does not, and why sleep is repair. Each mechanism ends by naming
+the specific behaviour in the app it produced.
 
 **Graduated return plans, with the rules enforced in code.** Four steps back to
 learning or work, six back to sport, from the Amsterdam 2023 consensus, with
-learning taking precedence.
+learning taking precedence. The evidence base is the one the field actually
+uses: the Amsterdam consensus, the Living Concussion Guidelines (adults 18+),
+and the PedsConcussion living guideline — with the pediatric scope stated
+rather than implied.
 
 | Rule | Implementation |
 | ---- | -------------- |
@@ -320,6 +341,7 @@ src/
 │   │   ├── redflags.ts        #   CDC danger signs, shown unprompted
 │   │   ├── symptoms.ts        #   the 22-item check and its scoring
 │   │   ├── protocol.ts        #   return-to-learn / return-to-sport, and the gates
+│   │   ├── neuroscience.ts    #   the mechanism behind each rule, cited
 │   │   └── evidence.ts        #   sources, guidance, and stated limitations
 │   ├── profile.ts · mood.ts · breathing.ts · prompts.ts · date.ts · cn.ts · motion.ts
 │   └── sampleData.ts          # The labelled, removable demo dataset
@@ -390,7 +412,7 @@ dimmed eyes-closed session.
 
 ## Testing
 
-**101 Playwright tests** across 13 spec files, each screen covered empty and
+**157 Playwright tests** across 14 spec files, each screen covered empty and
 filled, every screen ending in an axe WCAG 2.1 A/AA scan.
 
 ```bash
@@ -404,6 +426,7 @@ npm run test
 | `echo-retrieval.spec.ts` | recall@3, MRR, register parity, ranking mechanics, and every verification rule — in Node, with no model |
 | `recovery.spec.ts` | Every gate in the return protocol, including the one that refuses to clear anyone for contact |
 | `breathe.spec.ts` | What the voice says and when, and that it says nothing when switched off |
+| `crisis-language.spec.ts` | 53 phrasings of crisis, concern and everyday idiom — including the euphemisms platform moderation trained people into |
 
 Echo's browser tests exercise the **lexical path exclusively**, so nothing
 downloads a model in CI — and that is the path most visitors meet first.
@@ -432,9 +455,13 @@ Paraphrased rather than reproduced, cited in the app, checked 2026-08-14.
 | ------ | -------- |
 | CDC HEADS UP | The danger signs, verbatim as a list |
 | Amsterdam consensus statement 2023 (Patricios et al., *BJSM*) | Graduated return-to-learn and return-to-sport strategies, stage rules, persisting-symptom definition |
+| Living Concussion Guidelines (adults 18+) | Prolonged-symptom management, sleep guidance |
+| PedsConcussion Living Guideline | The pediatric reference, and the stated scope limit |
 | Concussion Alliance | Sleep, mood and recovery summaries |
 | Macnow et al., *JAMA Pediatrics* 2021 | Screen-time guidance in the first 48 hours |
 | Leddy et al. | Sub-symptom-threshold aerobic exercise |
+| Giza & Hovda, *Neurosurgery* 2014 | The neurometabolic cascade behind the mechanism explanations |
+| Ponsford et al., *JNNP* 2002 | The evidence that education itself reduces persisting symptoms |
 
 The 22-item symptom evaluation is the post-concussion symptom scale used in
 concussion care. The SCAT itself is the Concussion in Sport Group's instrument
