@@ -36,7 +36,7 @@ Built solo for **Hack for Humanity, Summer 2026**.
 
 | Screen | What it is |
 | ------ | ---------- |
-| **Landing** | Sets the tone, and showcases the pipeline live — type a question and watch it run, try to make it fabricate, try to exfiltrate, run the evaluation suite in your browser |
+| **Landing** | Sets the tone. A live breath, a sample of the check-in, and nothing that needs explaining |
 | **Onboarding** | Name → what brings you here → coping style. Completing it is what "signed in" means |
 | **Home** | Your space, with a greeting shaped by the profile |
 | **Mood** | A daily check-in with tags and an optional note. One entry a day, editable, 30 days of history |
