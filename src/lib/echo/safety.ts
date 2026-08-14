@@ -80,6 +80,65 @@ const ACUTE_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['end-it-all', /\bend(ing)?\s+it\s+all\b/i],
   ['overdose', /\b(overdose|od)\s+(on|myself)\b/i],
   ['goodbye', /\b(this\s+is\s+goodbye|saying\s+goodbye\s+to\s+everyone)\b/i],
+
+  /*
+   * Everything below was added after auditing this guard against roughly
+   * 53,000 real statements — see `scripts/audit-crisis-guard.ts`. The corpus is
+   * not in this repository and nothing from it is reproduced here; these are
+   * patterns written from *reading* what the guard walked past, which is the
+   * part worth keeping.
+   *
+   * The audit is the reason they exist rather than an intuition that they
+   * might. Recall against the statements labelled suicidal was 51.7% before
+   * them, and the phrasings being missed were not exotic — they were simply
+   * not the ones anyone had thought to write down.
+   */
+
+  // "I really want to just end it" — the bare form, without "all".
+  [
+    'end-it',
+    /\b(want|wanna|going|gonna|ready|need)\s+to\s+(just\s+)?end\s+it\b|\bshould\s+i\s+(just\s+)?end\s+it\b/i,
+  ],
+
+  // Asking for a method: a later and more dangerous stage than a wish.
+  [
+    'method-seeking',
+    // "way to go" is left to the euphemisms that are unambiguous — "the best
+    // way to go is by train" is a train, and the benign battery says so.
+    /\b(painless|quickest|fastest|easiest|surest|best)\s+way\s+to\s+(die|kill\s+myself|end\s+it)\b|\b(painless|least\s+painful)\s+way\s+to\s+go\b|\bno\s+chance\s+of\s+failure\b|\bhow\s+(do|can)\s+i\s+(kill\s+myself|end\s+it)\b/i,
+  ],
+
+  // Asking whether something would be fatal, and how much of it it would take.
+  [
+    'lethality-question',
+    /\b(lead|leads|leading)\s+to\s+death\b|\bhow\s+(much|many)\b[^.?!]{0,50}\b(lethal|kill\s+me|to\s+die|overdose)\b/i,
+  ],
+
+  // An overdose described as under way or imminent, rather than "od on".
+  [
+    'overdose-intent',
+    /\b(going|gonna|about)\s+to\s+(overdose|od)\b|\btook\s+\d+\s*(mg|milligrams?|pills?|tablets?)\b/i,
+  ],
+
+  // Named methods, aimed at oneself.
+  [
+    'self-harm-method',
+    /\bslit\s+(my\s+)?(wrist|wrists|throat)\b|\b(knife|blade|razor)\s+(on|to)\s+my\s+(wrist|wrists|throat|chest|neck)\b|\b(gun|shotgun|rifle)\s+to\s+my\s+(head|mouth|chest)\b/i,
+  ],
+
+  [
+    'not-worth-being-alive',
+    /\b(do\s?n[o’']?t|dont|do\s+not)\s+deserve\s+to\s+(be\s+alive|live)\b|\b(do\s?n[o’']?t|dont|do\s+not)\s+feel\s+like\s+living\b|\bi\s+should\s+just\s+die\b/i,
+  ],
+
+  [
+    'want-it-to-stop',
+    /\bwant\s+(it|everything)\s+(all\s+)?to\s+(stop|end)\b|\bwant\s+to\s+stop\s+existing\b|\b(do\s?n[o’']?t|dont|do\s+not)\s+make\s+me\s+keep\s+living\b/i,
+  ],
+
+  ['suicide-note', /\bsuicide\s+note\b/i],
+
+  ['attempt', /\bsuicide\s+attempt\b|\battempted\s+(suicide|to\s+kill\s+myself)\b/i],
 ]
 
 /**

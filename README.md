@@ -129,8 +129,9 @@ guard → expand → retrieve → fuse → aggregate → rerank → verify
 1. **guard** — risk assessment on the input, before anything is searched, with
    no dependency on the model having downloaded. Written in the language people
    actually use — contractions folded, and the moderation-era euphemisms
-   ("kms", "unalive") caught alongside the clinical phrasing — and held up by a
-   53-case battery of acute, concerning, and deliberately benign phrasings.
+   ("kms", "unalive") caught alongside the clinical phrasing — held up by a
+   73-case battery of acute, concerning, and deliberately benign phrasings, and
+   **audited against ~53,000 real statements** (see below).
 2. **expand** — stemming, contraction folding, and a curated near-synonym set
    applied to the query only.
 3. **retrieve** — two independent rankings: BM25 over terms, cosine over
@@ -309,6 +310,48 @@ for either. And on risk, the trained head may only ever *raise* a level, never
 lower one — and cannot reach `high` at all, since an emergency route deserves a
 pattern a person can read rather than a probability.
 
+### The crisis guard, audited against real text
+
+The guard's recall had only ever been measured against phrasings written by the
+person who wrote the guard — which measures imagination, not coverage. It is now
+audited against the Kaggle *Sentiment Analysis for Mental Health* corpus:
+~53,000 statements scraped from social media and labelled by mental-health
+status.
+
+| Slice | Before | After |
+| ----- | ------ | ----- |
+| Recall on `Suicidal` (10,652 statements) | 51.7% | **53.6%** |
+| False-positive rate on `Normal` (16,343) | 0.2% | **0.2%** |
+
+Two hundred more real disclosures caught, for two more false positives out of
+sixteen thousand. The new patterns — method-seeking, lethality questions,
+overdose in progress, named self-harm methods, "I just want to end it" — came
+from *reading* what the guard walked past. They were not exotic phrasings; they
+were simply not the ones anyone had thought to write down.
+
+**How to read 53.6%.** It is a loose lower bound. The corpus labels a post's
+overall status, not whether a sentence discloses intent, so a large share of
+`Suicidal` rows contain no disclosure at all — someone describing a bad week,
+asking about medication, replying to a thread. A guard that fired on all of them
+would be a guard that fires on everything. The number worth watching is the
+direction, alongside precision holding.
+
+Inspecting the 29 false positives is instructive too: most are dataset
+mislabels ("i just cut myself again", labelled `Normal`) or harmless idiom
+("did km on the treadmill and want to die"). Given the stated policy — a
+helpline shown to someone quoting a lyric costs a moment's annoyance, a missed
+disclosure cannot be undone — those are the right side to err on.
+
+**The corpus is not in this repository, and nothing from it is reproduced.** It
+is 31MB of real people's mental-health disclosures from public platforms.
+DbCL-1.0 would permit redistribution; the ODbL share-alike that DbCL defers to
+sits badly with this project's MIT licence, the licence explicitly does not
+cover the privacy rights of the people who wrote those posts, and republishing
+them inside a hackathon entry is the wrong thing to do regardless. What is
+committed is what was learned: the patterns, and the numbers above. Run
+`npx tsx scripts/audit-crisis-guard.ts <path>` against a local copy to reproduce
+them.
+
 ### The evidence corpus
 
 ~340 documents, each carrying org, title, topic, type, URL and retrieval date.
@@ -442,6 +485,7 @@ To try it with data in it, open **Settings → Load sample data**.
 | `npm run test` | Playwright + axe suite (starts its own dev server) |
 | `npm run train` | Refit both classifier heads and rewrite the model artefacts |
 | `npm run build:evidence` | Rebuild the MedQuAD slice of the evidence corpus |
+| `npx tsx scripts/audit-crisis-guard.ts <csv>` | Audit crisis-guard recall and precision against a local corpus |
 | `npm run verify` | `lint` + `build` + `test` — the pre-push gate |
 | `npm run preview` | Serve the production build locally |
 
@@ -571,7 +615,7 @@ npm run test
 | `recovery.spec.ts` | Every gate in the return protocol, including the one that refuses to clear anyone for contact |
 | `breathe.spec.ts` | What the voice says and when, and that it says nothing when switched off |
 | `guide-classifier.spec.ts` | Train/eval disjointness, published metrics, rules outranking the model, corpus id uniqueness |
-| `crisis-language.spec.ts` | 53 phrasings of crisis, concern and everyday idiom — including the euphemisms platform moderation trained people into |
+| `crisis-language.spec.ts` | 73 phrasings of crisis, concern and everyday idiom — including the euphemisms platform moderation trained people into, and guards against the newer patterns over-reaching |
 | `guide-pipeline.spec.ts` | Ask's eval gates, the verifier red-teamed with corrupted responses, injection inertness |
 | `ask.spec.ts` | The safe-response format on screen, escalation replacing education, a11y in every state |
 

@@ -57,6 +57,24 @@ const ACUTE: readonly string[] = [
   'thinking about unaliving',
   'might just off myself',
   'thought about offing myself today',
+  // Categories the audit against real statements showed the guard missing.
+  // These are written here rather than copied from that corpus — see
+  // scripts/audit-crisis-guard.ts for why none of it is reproduced.
+  'I just want to end it',
+  'should I end it',
+  'what is the most painless way to die',
+  'looking for a painless way to go',
+  'how many pills would be lethal',
+  'would that lead to death',
+  'I am going to overdose tonight',
+  'I took 40 tablets an hour ago',
+  'I want to slit my wrists',
+  'I held a knife to my chest',
+  'I do not deserve to be alive',
+  'I should just die',
+  'I want it all to stop',
+  'I wrote a suicide note',
+  'I attempted suicide last year',
 ]
 
 /** Heavy, but not an emergency — support offered alongside, not instead. */
@@ -85,6 +103,12 @@ const BENIGN: readonly string[] = [
   'the plant on my desk is dead',
   'trying to kill some time before my appointment',
   'the party was dead by ten',
+  // Guards against the new patterns over-reaching.
+  'I want this headache to stop',
+  'I took the bins out an hour ago',
+  'the best way to go is by train',
+  'I attempted the exam twice',
+  'I wrote a note to my teacher',
 ]
 
 test.describe('acute language is caught', () => {
