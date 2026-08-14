@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { RequireProfile } from './components/RequireProfile'
 import { Breathe } from './routes/Breathe'
 import { Home } from './routes/Home'
@@ -45,14 +46,18 @@ const GUARDED = [
  */
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/onboarding" element={<Onboarding />} />
-      {GUARDED.map(({ path, element }) => (
-        <Route key={path} path={path} element={<RequireProfile>{element}</RequireProfile>} />
-      ))}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    // Inside the router, so the fallback's "start again" link is a real
+    // navigation rather than a full page load into the same broken state.
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/" element={<Landing />} />
+        <Route path="/onboarding" element={<Onboarding />} />
+        {GUARDED.map(({ path, element }) => (
+          <Route key={path} path={path} element={<RequireProfile>{element}</RequireProfile>} />
+        ))}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </ErrorBoundary>
   )
 }
 

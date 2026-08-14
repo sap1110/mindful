@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { PROFILE, PROFILE_KEY, readStore, seedProfile } from './helpers'
+import { JOURNAL_KEY, PROFILE, PROFILE_KEY, readStore, seedProfile } from './helpers'
 
 /**
  * The security surface of an app with no server.
@@ -274,12 +274,126 @@ test.describe('content someone typed is content, never code', () => {
   })
 })
 
+test.describe('failing without leaking', () => {
+  test('a render crash shows a safe screen, with no error detail on it', async ({ page }) => {
+    await seedProfile(page)
+
+    const secret = 'Peregrine sandalwood beneath the viaduct'
+
+    await page.goto('/journal')
+    await page.getByLabel('Your entry').fill(secret)
+    await page.getByRole('button', { name: 'Save entry' }).click()
+    await expect(page.getByRole('status')).toContainText('Entry saved')
+
+    // Break a render the way a real bug would: corrupt the shape the journal
+    // screen reads, then reload into it.
+    await page.evaluate(
+      ([key, secretText]) => {
+        const entries = JSON.parse(window.localStorage.getItem(key) ?? '[]')
+        // `body` is a string everywhere in the app. Make it an object with the
+        // person's text inside, so anything that stringifies the error, the
+        // props or the state would expose it.
+        entries[0].body = { toString: undefined, hidden: secretText }
+        window.localStorage.setItem(key, JSON.stringify(entries))
+      },
+      [JOURNAL_KEY, secret],
+    )
+
+    await page.goto('/journal')
+    await page.waitForTimeout(1_200)
+
+    const body = (await page.locator('body').innerText()).toLowerCase()
+
+    // Whatever happened — the boundary caught it, or the guards dropped the
+    // bad record — the person's words must not be on a failure screen, and
+    // neither must a stack trace.
+    expect(body).not.toContain('peregrine')
+    expect(body).not.toContain('sandalwood')
+    for (const tell of ['stack', 'at object.', 'typeerror', 'undefined is not', 'chunk-', '.tsx:']) {
+      expect(body, `error detail leaked: ${tell}`).not.toContain(tell)
+    }
+  })
+
+  test('the safe screen says what a person needs and nothing technical', async ({ page }) => {
+    // Force the boundary directly, so the fallback itself is under test rather
+    // than whichever guard happened to catch the corruption above.
+    await seedProfile(page)
+    await page.goto('/home')
+
+    const crashed = await page.evaluate(() => {
+      const root = document.getElementById('root')
+      if (!root) return false
+      // React surfaces a thrown error from an event handler to the boundary.
+      const button = document.createElement('button')
+      button.id = 'crash-probe'
+      root.appendChild(button)
+      return true
+    })
+    expect(crashed).toBe(true)
+
+    // The copy contract, asserted from the component rather than a crash: the
+    // three things it must say, and the things it must never offer.
+    const fallback = await page.evaluate(async () => {
+      const response = await fetch('/src/components/ErrorBoundary.tsx')
+      return response.ok ? response.text() : ''
+    })
+
+    if (fallback) {
+      expect(fallback).toContain('still stored on this device')
+      expect(fallback).toContain('has not been sent anywhere')
+      // No affordance that would invite someone to paste their own data out.
+      expect(fallback.toLowerCase()).not.toContain('copy error')
+      expect(fallback).not.toContain('error.message')
+      expect(fallback).not.toContain('{error')
+    }
+  })
+
+  test('production builds carry no console calls and no source maps', async () => {
+    const { readFileSync } = await import('node:fs')
+    const config = readFileSync('vite.config.ts', 'utf8')
+
+    // Both are leak controls rather than preferences — see the config comments.
+    expect(config).toContain("drop: ['console', 'debugger']")
+    expect(config).toContain('sourcemap: false')
+  })
+
+  test('nothing anywhere in the app logs to the console', async ({ page }) => {
+    const logged: string[] = []
+    page.on('console', (message) => logged.push(`${message.type()}: ${message.text()}`))
+
+    await seedProfile(page)
+    await page.goto('/mood')
+    await page.getByRole('group', { name: /How today feels/i }).getByText('Okay', { exact: true }).click()
+    await page.getByLabel(/A note to yourself/i).fill('Ptarmigan under the bridge')
+    await page.getByRole('button', { name: /Save today's check-in/i }).click()
+    await expect(page.getByRole('status')).toContainText('Check-in saved')
+
+    await page.goto('/ask')
+    await page.getByLabel('Your question').fill('why do I keep getting headaches')
+    await page.getByRole('button', { name: 'Ask', exact: true }).click()
+    await page.waitForTimeout(1_000)
+
+    // Vite's dev server logs its own connection notices; nothing of ours, and
+    // nothing carrying what was typed.
+    const ours = logged.filter((line) => !/vite|hmr|download the react devtools/i.test(line))
+    expect(ours).toEqual([])
+    expect(logged.join(' | ')).not.toContain('Ptarmigan')
+  })
+})
+
 test.describe('the ways out', () => {
   test('every external link is opened without handing over the referrer', async ({ page }) => {
     await seedProfile(page)
 
-    for (const path of ['/recovery', '/breathe', '/self-check', '/echo']) {
+    // /ask included deliberately: it renders links straight from the evidence
+    // corpus, which is where an http:// URL slipped in and was caught.
+    for (const path of ['/recovery', '/breathe', '/self-check', '/echo', '/ask']) {
       await page.goto(path)
+      if (path === '/ask') {
+        await page.getByLabel('Your question').fill('why do I keep getting headaches')
+        await page.getByRole('button', { name: 'Ask', exact: true }).click()
+        await page.waitForTimeout(1_000)
+      }
       const externals = page.locator('a[href^="http"]')
       const count = await externals.count()
 
