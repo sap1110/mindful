@@ -43,13 +43,13 @@ const PATTERN_GUIDANCE: Readonly<Record<string, PatternGuidance>> = {
   },
   box: {
     provenance:
-      'Equal-count breathing with holds, widely taught for steadying attention. It is not described by a named health body in the form used here.',
+      'Equal counts in, hold, out — widely taught as triangle breathing for steadying attention. It is not described by a named health body in the form used here.',
     sourceId: null,
     holdsBreath: true,
     cautions: [
-      'It holds the breath twice a round. Keep the hold comfortable — a hold you have to brace for is too long.',
+      'It holds the breath once a round. Keep the hold comfortable — a hold you have to brace for is too long.',
     ],
-    spokenCaution: "Don't force the holds. If one feels long, breathe out early.",
+    spokenCaution: "Don't force the hold. If it feels long, breathe out early.",
   },
   calming: {
     provenance:

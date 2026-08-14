@@ -24,7 +24,7 @@ test.describe('breathing', () => {
     await page.goto('/breathe')
     await expect(page.getByRole('heading', { name: 'Breathe', exact: true })).toBeVisible()
 
-    for (const name of ['Box', 'Calming', 'Relaxed']) {
+    for (const name of ['Triangle', 'Calming', 'Relaxed']) {
       await expect(page.getByRole('radio', { name: new RegExp(name) })).toHaveCount(1)
     }
     for (const label of ['1 min', '3 min', '5 min']) {
@@ -41,11 +41,11 @@ test.describe('breathing', () => {
     await expect(safety.getByText(/dizzy, lightheaded or tingly/)).toBeVisible()
     await expect(safety.getByText(/never while driving, cycling, in water/)).toBeVisible()
 
-    // Box holds the breath, so it carries a caution the 5-5 rhythm does not.
-    await expect(safety.getByText(/holds the breath twice a round/)).toBeVisible()
+    // Triangle holds the breath, so it carries a caution the 5-5 rhythm does not.
+    await expect(safety.getByText(/holds the breath once a round/)).toBeVisible()
 
     await page.getByText('Relaxed', { exact: true }).click()
-    await expect(safety.getByText(/holds the breath twice a round/)).toHaveCount(0)
+    await expect(safety.getByText(/holds the breath once a round/)).toHaveCount(0)
 
     // And it says which rhythm a health body actually describes.
     await expect(safety.getByText(/The NHS describes this rhythm/)).toBeVisible()
@@ -61,7 +61,7 @@ test.describe('breathing', () => {
     await expect(phase).toHaveText('Breathe in')
     await expect(page.getByText(/left in this step/)).toBeVisible()
 
-    // Box is 4-4-4-4, so the next instruction is due four seconds in.
+    // Triangle is 4-4-4, so the next instruction is due four seconds in.
     await expect(phase).toHaveText('Hold', { timeout: 9_000 })
   })
 
@@ -74,7 +74,7 @@ test.describe('breathing', () => {
     await expect(phase).toHaveText('Paused')
 
     await page.getByRole('button', { name: 'Resume' }).click()
-    await expect(phase).toHaveText(/Breathe in|Hold|Breathe out|Rest/)
+    await expect(phase).toHaveText(/Breathe in|Hold|Breathe out/)
   })
 
   test('records the session when you stop early', async ({ page }) => {
@@ -95,6 +95,38 @@ test.describe('breathing', () => {
     const recent = page.getByRole('region', { name: 'Recent sessions' })
     await expect(recent.getByText(/Relaxed ·/)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start another' })).toBeVisible()
+  })
+
+  test('stopping a session hands the controls straight back', async ({ page }) => {
+    await page.goto('/breathe')
+    await page.getByRole('button', { name: 'Begin' }).click()
+    await page.waitForTimeout(1_200)
+    await page.getByRole('button', { name: 'Stop' }).click()
+    await expect(page.getByRole('status')).toContainText('Session recorded')
+
+    // One click restarts — no reset step in between.
+    await page.getByRole('button', { name: 'Start another' }).click()
+    const phase = page.locator('p > span[aria-live="polite"]').first()
+    await expect(phase).toHaveText('Breathe in')
+    await page.waitForTimeout(1_200)
+    await page.getByRole('button', { name: 'Stop' }).click()
+    await expect(page.getByRole('status')).toContainText('Session recorded')
+
+    // The bug this guards against: after Stop, every chooser stayed disabled
+    // until a full page reload. A finished session is exactly the moment
+    // someone wants to try a different rhythm.
+    const relaxed = page.getByRole('radio', { name: /Relaxed/ })
+    await expect(relaxed).toBeEnabled()
+    await page.getByText('Relaxed', { exact: true }).click()
+    await expect(relaxed).toBeChecked()
+
+    // Picking a new rhythm clears the finished session, so Begin returns.
+    await page.getByRole('button', { name: 'Begin' }).click()
+    await expect(phase).toHaveText('Breathe in')
+
+    // And pausing also frees the chooser, so the rhythm can change mid-way.
+    await page.getByRole('button', { name: 'Pause' }).click()
+    await expect(page.getByRole('radio', { name: /Triangle/ })).toBeEnabled()
   })
 
   test('has no WCAG A/AA violations', async ({ page }) => {
@@ -152,9 +184,9 @@ test.describe('spoken guide', () => {
 
     // The lead-in comes first, and it carries the caution.
     expect(intro).toContain('dizzy or lightheaded')
-    expect(intro).toContain("Don't force the holds")
+    expect(intro).toContain("Don't force the hold")
 
-    // Box is 4-4-4-4, so the first two steps are always these.
+    // Triangle is 4-4-4, so the first two steps are always these.
     expect(cues.slice(0, 2)).toEqual(['Breathe in', 'Hold'])
   })
 
@@ -205,7 +237,7 @@ test.describe('eyes-closed mode', () => {
 
     // The lead-in says so aloud too, for the person who already closed them.
     await expect.poll(() => spokenLines(page)).toContainEqual(
-      expect.stringContaining("close your eyes — you won't need the screen"),
+      expect.stringContaining("you won't need the screen"),
     )
 
     // Tapping anywhere pauses: nobody with their eyes shut can aim at a button.
@@ -236,27 +268,28 @@ test.describe('eyes-closed mode', () => {
     await expect(dark.getByText('Breathe in')).toBeVisible({ timeout: 10_000 })
     await page.waitForTimeout(1_200)
     await page.keyboard.press('Escape')
-    await page.getByRole('button', { name: 'Start another' }).click()
 
-    // Second time: straight into the session, no second confirmation.
-    await page.getByRole('button', { name: 'Begin' }).click()
+    // Second time: "Start another" goes straight back into the dark session —
+    // one click, and no second confirmation.
+    await page.getByRole('button', { name: 'Start another' }).click()
     await expect(page.getByRole('dialog', { name: 'Before you close your eyes' })).toHaveCount(0)
     await expect(dark).toBeVisible()
     await expect(dark.getByText('Breathe in')).toBeVisible({ timeout: 10_000 })
     await page.waitForTimeout(1_200)
     await page.keyboard.press('Escape')
-    await page.getByRole('button', { name: 'Start another' }).click()
 
     // Switching the voice off takes eyes-closed with it — a dark screen with no
-    // guidance is not a feature.
+    // guidance is not a feature. The chooser is usable right here, after the
+    // stop, without any reset click.
     await page.getByText('Guide me by voice').click()
     expect(await readStore<{ eyesClosed: boolean }>(page, VOICE_KEY)).toMatchObject({
       enabled: false,
       eyesClosed: false,
     })
 
-    await page.getByRole('button', { name: 'Begin' }).click()
+    await page.getByRole('button', { name: 'Start another' }).click()
     await expect(page.getByRole('dialog', { name: 'Eyes-closed breathing session' })).toHaveCount(0)
+    await expect(page.getByText(/left in this step/)).toBeVisible()
   })
 
   test('has no WCAG A/AA violations with the screen dimmed', async ({ page }) => {
@@ -283,7 +316,7 @@ test.describe('breathing with reduced motion', () => {
     await expect(page.getByText('Ready when you are')).toBeVisible()
 
     // The whole rhythm is written out as steps, not just the current one.
-    const steps = page.getByRole('listitem').filter({ hasText: /Breathe in|Hold|Breathe out|Rest/ })
+    const steps = page.getByRole('listitem').filter({ hasText: /Breathe in|Hold|Breathe out/ })
     await expect(steps.first()).toBeVisible()
 
     await page.getByRole('button', { name: 'Begin' }).click()

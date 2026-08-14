@@ -65,9 +65,20 @@ function voiceId(voice: SpeechSynthesisVoice): string {
   return voice.voiceURI || voice.name
 }
 
-/** Lower sorts earlier. Preferred names first, then the rest alphabetically. */
+/**
+ * Lower sorts earlier. Neural voices first wherever one is installed, then the
+ * preferred-name list, then the rest alphabetically.
+ *
+ * The "natural" check matters more than the whole list below it. Windows 11
+ * and recent macOS let people install neural voices that run fully on-device —
+ * they appear as `localService` without the "Online" marker, so they pass the
+ * privacy filter — and next to one of those every legacy voice sounds like a
+ * station announcement. If someone has installed one, it is unquestionably
+ * what they want leading a breathing session.
+ */
 function rank(voice: SpeechSynthesisVoice): number {
   const name = voice.name.toLowerCase()
+  if (name.includes('natural') || name.includes('neural') || name.includes('premium')) return -1
   const index = PREFERRED_NAMES.findIndex((preferred) => name.includes(preferred))
   return index === -1 ? PREFERRED_NAMES.length : index
 }
@@ -133,9 +144,37 @@ export interface SpeakOptions {
   interrupt?: boolean
 }
 
-/** Unhurried, a touch below the default pitch. Instructions, not narration. */
-export const CALM_RATE = 0.82
-export const CALM_PITCH = 0.96
+/**
+ * Near-normal delivery, with the calm coming from punctuation rather than
+ * from dragging the rate.
+ *
+ * The first version ran at 0.82× and slightly below default pitch, on the
+ * theory that slower means calmer. On the legacy voices most machines actually
+ * have, it means the opposite: concatenative synthesis stretched below its
+ * recorded speed smears into a slur, which reads as unsettling rather than
+ * soothing. Engines pause naturally at commas and full stops, so the pacing
+ * now lives in the text (see `soften`) while the voice speaks at a rate it was
+ * built for.
+ */
+export const CALM_RATE = 0.95
+export const CALM_PITCH = 1
+
+/**
+ * Rewrite a cue into the punctuation speech engines handle gracefully.
+ *
+ * Em and en dashes are the main offender: written for the eye, they make some
+ * engines lurch or read them out, where a comma produces exactly the gentle
+ * pause the dash meant. Ellipses similarly. The written copy on screen keeps
+ * its dashes; only the spoken form is softened.
+ */
+function soften(text: string): string {
+  return text
+    .replace(/\s*[—–]\s*/g, ', ')
+    .replace(/\s*\.\.\.\s*|…/g, ', ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+,/g, ',')
+    .trim()
+}
 
 /**
  * Kept alive for the length of the utterance. Chrome can garbage-collect an
@@ -165,8 +204,10 @@ export function speak(text: string, options: SpeakOptions = {}): Promise<void> {
   const { rate = CALM_RATE, pitch = CALM_PITCH, interrupt = true } = options
   if (interrupt) speech.cancel()
 
+  const spoken = soften(text)
+
   return new Promise((resolve) => {
-    const utterance = new SpeechSynthesisUtterance(text)
+    const utterance = new SpeechSynthesisUtterance(spoken)
     utterance.voice = voice
     utterance.lang = voice.lang
     utterance.rate = rate
@@ -184,7 +225,7 @@ export function speak(text: string, options: SpeakOptions = {}): Promise<void> {
 
     // Roughly 12 characters a second at rate 1, plus headroom. Only ever
     // reached when the platform loses the utterance; the events win normally.
-    const estimate = ((text.length / 12) * 1000) / Math.max(rate, 0.5) + 4_000
+    const estimate = ((spoken.length / 12) * 1000) / Math.max(rate, 0.5) + 4_000
     const timer = window.setTimeout(finish, estimate)
 
     utterance.onend = finish

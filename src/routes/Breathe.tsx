@@ -72,7 +72,17 @@ export function Breathe() {
   const isRunning = session.status === 'running'
   const isPaused = session.status === 'paused'
   const isComplete = session.status === 'complete'
-  const isChoosing = session.status === 'idle' && !cues.preparing
+  const isIdle = session.status === 'idle' && !cues.preparing
+
+  /*
+   * The chooser locks only while breath is actually being led. It used to lock
+   * on anything that was not 'idle', which meant stopping a session mid-way
+   * left every control grey until a full reload — a finished session is
+   * exactly the moment someone wants to try a different rhythm. Changing the
+   * rhythm or length while paused or after finishing resets the clock through
+   * `useBreathingSession`'s own effect, so nothing can desynchronise.
+   */
+  const canAdjust = !isRunning && !cues.preparing
 
   // A session nobody is watching is a session the phone will try to sleep
   // through, taking the voice with it.
@@ -116,7 +126,7 @@ export function Breathe() {
             Choose a rhythm, a length, and how it guides you
           </h2>
 
-          <fieldset className="border-0 p-0" disabled={!isChoosing}>
+          <fieldset className="border-0 p-0" disabled={!canAdjust}>
             <legend className="mb-3 text-sm font-medium text-text">Rhythm</legend>
             <div className="grid grid-cols-3 gap-2">
               {BREATHING_PATTERNS.map((option) => (
@@ -136,7 +146,7 @@ export function Breathe() {
             <p className="mt-2.5 text-sm text-text-muted">{pattern.description}</p>
           </fieldset>
 
-          <fieldset className="mt-6 border-0 p-0" disabled={!isChoosing}>
+          <fieldset className="mt-6 border-0 p-0" disabled={!canAdjust}>
             <legend className="mb-3 text-sm font-medium text-text">How long</legend>
             <div className="flex flex-wrap gap-2">
               {SESSION_LENGTHS.map((option) => (
@@ -153,7 +163,7 @@ export function Breathe() {
             </div>
           </fieldset>
 
-          <VoiceGuidePanel guide={guide} disabled={!isChoosing} className="mt-6" />
+          <VoiceGuidePanel guide={guide} disabled={!canAdjust} className="mt-6" />
         </motion.section>
 
         <motion.div variants={staggerChild}>
@@ -221,14 +231,14 @@ export function Breathe() {
               {session.elapsedMs > 0 ? ` · ${formatDuration(session.elapsedMs)} so far` : null}
             </p>
 
-            {voiceOn && !eyesClosed && (isChoosing || isRunning || isPaused) ? (
+            {voiceOn && !eyesClosed && (isIdle || isRunning || isPaused) ? (
               <p className="mt-2 text-center text-sm text-primary">
                 The voice is on — you can close your eyes and listen instead of watching.
               </p>
             ) : null}
 
             <div className="mt-6 flex flex-wrap justify-center gap-3">
-              {isChoosing ? (
+              {isIdle ? (
                 <Button size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={handleBegin}>
                   Begin
                 </Button>
@@ -269,7 +279,7 @@ export function Breathe() {
               ) : null}
 
               {isComplete ? (
-                <Button size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={session.reset}>
+                <Button size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={handleBegin}>
                   Start another
                 </Button>
               ) : null}

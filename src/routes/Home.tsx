@@ -39,7 +39,7 @@ const SURFACES = [
     title: 'Journal',
     body: 'A prompt if you want one, a blank page if you do not.',
   },
-  { to: '/breathe', icon: Wind, title: 'Breathe', body: 'Box, 4-7-8 or a slower, even rhythm.' },
+  { to: '/breathe', icon: Wind, title: 'Breathe', body: 'Triangle, 4-7-8 or a slower, even rhythm.' },
   {
     to: '/settings',
     icon: SettingsIcon,

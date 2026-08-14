@@ -100,8 +100,6 @@ function spokenVerb(phase: BreathPhase): string {
       return 'out'
     case 'hold':
       return 'hold'
-    case 'rest':
-      return 'rest'
   }
 }
 

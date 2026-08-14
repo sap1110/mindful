@@ -8,7 +8,7 @@
  * circle and the count agree.
  */
 
-export type BreathPhaseKind = 'inhale' | 'hold' | 'exhale' | 'rest'
+export type BreathPhaseKind = 'inhale' | 'hold' | 'exhale'
 
 export interface BreathPhase {
   kind: BreathPhaseKind
@@ -21,7 +21,7 @@ export interface BreathPhase {
 export interface BreathingPattern {
   id: string
   name: string
-  /** The rhythm written out, e.g. "4-4-4-4". */
+  /** The rhythm written out, e.g. "4-4-4". */
   rhythm: string
   description: string
   phases: readonly BreathPhase[]
@@ -32,15 +32,18 @@ const EXHALE_SCALE = 0.74
 
 export const BREATHING_PATTERNS: readonly BreathingPattern[] = [
   {
+    // The id stays 'box' so sessions recorded under the old 4-4-4-4 box
+    // pattern still resolve. The empty-lungs hold that made it "box" is gone —
+    // in practice it read as being told to stop breathing, and the steadying
+    // effect survives without it — so this is now the standard 4-4-4 triangle.
     id: 'box',
-    name: 'Box',
-    rhythm: '4-4-4-4',
-    description: 'Equal in, hold, out, hold. Steadying when your thoughts are racing.',
+    name: 'Triangle',
+    rhythm: '4-4-4',
+    description: 'Equal in, hold, out. Steadying when your thoughts are racing.',
     phases: [
       { kind: 'inhale', label: 'Breathe in', seconds: 4, scale: INHALE_SCALE },
       { kind: 'hold', label: 'Hold', seconds: 4, scale: INHALE_SCALE },
       { kind: 'exhale', label: 'Breathe out', seconds: 4, scale: EXHALE_SCALE },
-      { kind: 'rest', label: 'Rest', seconds: 4, scale: EXHALE_SCALE },
     ],
   },
   {
