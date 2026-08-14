@@ -1,4 +1,13 @@
-import { ClipboardCheck, History, House, NotebookPen, Settings, Smile, Wind } from 'lucide-react'
+import {
+  Brain,
+  ClipboardCheck,
+  History,
+  House,
+  NotebookPen,
+  Settings,
+  Smile,
+  Wind,
+} from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '../lib/cn'
 
@@ -9,6 +18,7 @@ const ITEMS = [
   { to: '/echo', label: 'Echo', icon: History },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/breathe', label: 'Breathe', icon: Wind },
+  { to: '/recovery', label: 'Recovery', icon: Brain },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 
@@ -37,18 +47,18 @@ export function AppNav({ className }: { className?: string }) {
         className,
       )}
     >
-      <ul className="mx-auto flex max-w-lg items-stretch justify-between px-1 sm:gap-1 sm:px-2">
+      <ul className="mx-auto flex max-w-xl items-stretch justify-between px-0.5 sm:gap-1 sm:px-2">
         {ITEMS.map(({ to, label, icon: Icon }) => (
           <li key={to} className="flex-1 sm:flex-none">
             <NavLink
               to={to}
               className={({ isActive }) =>
                 cn(
-                  // Six destinations have to fit a 375px phone, so the mobile
-                  // label runs tight and unpadded; from `sm` up there is room
-                  // for the roomier pill treatment.
-                  'group flex h-full min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0.5 py-2',
-                  'text-2xs font-medium tracking-normal transition-colors duration-250 ease-calm',
+                  // Eight destinations have to fit a 375px phone, so the mobile
+                  // label runs tight, unpadded and a size down; from `sm` up
+                  // there is room for the roomier pill treatment.
+                  'group flex h-full min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0 py-2',
+                  'text-[0.625rem] font-medium leading-tight tracking-tight transition-colors duration-250 ease-calm',
                   'sm:min-h-12 sm:flex-row sm:gap-2 sm:rounded-pill sm:px-4 sm:tracking-[0.02em] sm:text-sm',
                   isActive
                     ? 'text-primary'
@@ -61,7 +71,7 @@ export function AppNav({ className }: { className?: string }) {
                   <span
                     aria-hidden="true"
                     className={cn(
-                      'flex h-7 w-9 items-center justify-center rounded-pill transition-colors duration-250 ease-calm',
+                      'flex h-7 w-8 items-center justify-center rounded-pill transition-colors duration-250 ease-calm',
                       'sm:h-6 sm:w-6',
                       isActive ? 'bg-primary-soft sm:bg-transparent' : 'bg-transparent',
                     )}

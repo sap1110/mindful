@@ -161,7 +161,7 @@ export function evaluationData(): MindfulData {
     updatedAt: `${fixture.date}T21:00:00.000Z`,
   }))
 
-  return { journal, moods, breathing: [], screeners: [] }
+  return { journal, moods, breathing: [], screeners: [], concussion: [] }
 }
 
 export interface QueryOutcome {

@@ -36,6 +36,10 @@ export const STORAGE_KEYS = {
   promptDismissed: 'mindful.v1.journal.promptDismissed',
   /** How the spoken breathing guide is set up on *this* device. */
   voice: 'mindful.v1.breathing.voice',
+  /** Daily concussion symptom checks. */
+  concussion: 'mindful.v1.concussion.checks',
+  /** Where someone is on the graduated return-to-learn/sport ladder. */
+  concussionProtocol: 'mindful.v1.concussion.protocol',
 } as const
 
 /* ----------------------------------------------------------------- types */
@@ -105,20 +109,55 @@ export interface ScreenerResult {
   createdAt: string
 }
 
+/**
+ * One day's concussion symptom check.
+ *
+ * Kept per item rather than as a total, for the same reason screener answers
+ * are: a clinician looking at three weeks of these needs to see that the
+ * headaches settled while the concentration did not, and a single number out
+ * of 132 cannot show that. Unlike a mood check-in, a later check on the same
+ * day replaces the earlier one — the question is "how are you now".
+ */
+export interface SymptomCheck {
+  id: string
+  /** Local calendar day, `YYYY-MM-DD`. */
+  date: string
+  /** Ratings keyed by symptom id, each 0-6. */
+  answers: Record<string, number>
+  /** Sum of all 22 ratings, 0-132. Stored so history reads without rescoring. */
+  severity: number
+  /** How many symptoms were present at all, 0-22. */
+  count: number
+  createdAt: string
+}
+
 export interface MindfulData {
   moods: MoodEntry[]
   journal: JournalEntry[]
   breathing: BreathingSession[]
   screeners: ScreenerResult[]
+  concussion: SymptomCheck[]
 }
 
 export interface ExportBundle extends MindfulData {
   schemaVersion: number
   exportedAt: string
   app: 'mindful'
+  /**
+   * Where the person is on the concussion return ladder, if they are on one.
+   * Part of the export because this file is the thing to hand a clinician, and
+   * "which stage, since when" is the first question they will ask.
+   */
+  concussionProtocol: StoredProtocol | null
 }
 
-const EMPTY: MindfulData = { moods: [], journal: [], breathing: [], screeners: [] }
+const EMPTY: MindfulData = {
+  moods: [],
+  journal: [],
+  breathing: [],
+  screeners: [],
+  concussion: [],
+}
 
 /* ------------------------------------------------------------- primitives */
 
@@ -207,6 +246,15 @@ function isBreathingSession(value: unknown): value is BreathingSession {
   return isNonEmptyString(value.completedAt)
 }
 
+function isSymptomCheck(value: unknown): value is SymptomCheck {
+  if (!isRecord(value)) return false
+  if (!isNonEmptyString(value.id) || !isIsoDay(value.date)) return false
+  if (typeof value.severity !== 'number' || typeof value.count !== 'number') return false
+  if (!isRecord(value.answers)) return false
+  if (!Object.values(value.answers).every((answer) => typeof answer === 'number')) return false
+  return isNonEmptyString(value.createdAt)
+}
+
 function isScreenerResult(value: unknown): value is ScreenerResult {
   if (!isRecord(value)) return false
   if (!isNonEmptyString(value.id) || !isIsoDay(value.date)) return false
@@ -262,6 +310,12 @@ export function readScreenerResults(): ScreenerResult[] {
   )
 }
 
+export function readSymptomChecks(): SymptomCheck[] {
+  return readList(STORAGE_KEYS.concussion, isSymptomCheck).sort((a, b) =>
+    b.date.localeCompare(a.date),
+  )
+}
+
 /** The whole on-device dataset, newest first in each collection. */
 export function readAll(): MindfulData {
   return {
@@ -269,6 +323,7 @@ export function readAll(): MindfulData {
     journal: readJournalEntries(),
     breathing: readBreathingSessions(),
     screeners: readScreenerResults(),
+    concussion: readSymptomChecks(),
   }
 }
 
@@ -569,6 +624,90 @@ export function saveScreenerResult(input: ScreenerInput): ScreenerResult {
   return result
 }
 
+/* --------------------------------------------------------- concussion API */
+
+export interface SymptomCheckInput {
+  date: string
+  answers: Record<string, number>
+  severity: number
+  count: number
+}
+
+/**
+ * Record a symptom check. One per day, replaced if it is taken again — a
+ * screener result is a record of what was answered on a day, but a symptom
+ * check answers "how are you now", and the later answer is the true one.
+ */
+export function saveSymptomCheck(input: SymptomCheckInput): SymptomCheck {
+  const existing = readSymptomChecks()
+  const check: SymptomCheck = {
+    id: existing.find((entry) => entry.date === input.date)?.id ?? createId('conc'),
+    date: input.date,
+    answers: { ...input.answers },
+    severity: input.severity,
+    count: input.count,
+    createdAt: new Date().toISOString(),
+  }
+
+  writeList(STORAGE_KEYS.concussion, [
+    check,
+    ...existing.filter((entry) => entry.date !== input.date),
+  ])
+  stampSchema()
+  emit()
+  return check
+}
+
+/**
+ * Where someone is on the return-to-learn or return-to-sport ladder.
+ *
+ * Stored as one record rather than a list: it is a position, not a history.
+ * Read defensively — a half-written or hand-edited value must not be able to
+ * put someone at stage 6 with a clearance they never got, so anything that
+ * fails its guard reads as "no protocol started".
+ */
+export interface StoredProtocol {
+  track: 'learn' | 'sport'
+  stage: number
+  startedAt: string
+  clinicianCleared: boolean
+  atBaseline: boolean
+}
+
+export function readProtocol(): StoredProtocol | null {
+  const raw = readRaw(STORAGE_KEYS.concussionProtocol)
+  if (!raw) return null
+
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed)) return null
+    if (parsed.track !== 'learn' && parsed.track !== 'sport') return null
+    if (typeof parsed.stage !== 'number' || !Number.isInteger(parsed.stage)) return null
+    if (parsed.stage < 1 || parsed.stage > 6) return null
+    if (!isNonEmptyString(parsed.startedAt)) return null
+
+    return {
+      track: parsed.track,
+      stage: parsed.stage,
+      startedAt: parsed.startedAt,
+      clinicianCleared: parsed.clinicianCleared === true,
+      atBaseline: parsed.atBaseline === true,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function saveProtocol(state: StoredProtocol): void {
+  writeRaw(STORAGE_KEYS.concussionProtocol, JSON.stringify(state))
+  emit()
+}
+
+export function clearProtocol(): void {
+  removeRaw(STORAGE_KEYS.concussionProtocol)
+  emit()
+}
+
 /* ------------------------------------------------------- sample-data marks */
 
 /** Ids seeded by the sample-data toggle, so turning it off removes only those. */
@@ -625,6 +764,10 @@ export function removeRecords(ids: readonly string[]): void {
     STORAGE_KEYS.screeners,
     readScreenerResults().filter((result) => !drop.has(result.id)),
   )
+  writeList(
+    STORAGE_KEYS.concussion,
+    readSymptomChecks().filter((check) => !drop.has(check.id)),
+  )
   emit()
 }
 
@@ -636,6 +779,7 @@ export function exportAll(): ExportBundle {
     app: 'mindful',
     schemaVersion: SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
+    concussionProtocol: readProtocol(),
     ...readAll(),
   }
 }

@@ -8,6 +8,7 @@ import { Landing } from './routes/Landing'
 import { Mood } from './routes/Mood'
 import { NotFound } from './routes/NotFound'
 import { Onboarding } from './routes/Onboarding'
+import { Recovery } from './routes/Recovery'
 import { SelfCheck } from './routes/SelfCheck'
 import { Settings } from './routes/Settings'
 
@@ -19,6 +20,7 @@ const GUARDED = [
   { path: '/echo', element: <Echo /> },
   { path: '/journal', element: <Journal /> },
   { path: '/breathe', element: <Breathe /> },
+  { path: '/recovery', element: <Recovery /> },
   { path: '/settings', element: <Settings /> },
 ]
 
@@ -33,6 +35,7 @@ const GUARDED = [
  *   /echo        on-device semantic search across your own entries
  *   /journal     prompt, composer and earlier entries
  *   /breathe     guided breathing sessions
+ *   /recovery    concussion symptom tracking and graduated return plans
  *   /settings    export, erase and sample data
  *
  * Everything after /onboarding is gated on an on-device profile.
