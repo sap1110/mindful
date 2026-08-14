@@ -3,7 +3,9 @@ import { BookOpen, ClipboardList, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppNav } from '../components/AppNav'
+import { AppointmentSummary } from '../components/concussion/AppointmentSummary'
 import { DangerSigns } from '../components/concussion/DangerSigns'
+import { NeuroscienceNotes } from '../components/concussion/NeuroscienceNotes'
 import { ProtocolTracker } from '../components/concussion/ProtocolTracker'
 import { SymptomCheckForm } from '../components/concussion/SymptomCheckForm'
 import { PageShell } from '../components/PageShell'
@@ -243,6 +245,19 @@ export function Recovery() {
             />
           </div>
         </motion.section>
+
+        {/* ---------------------------------------------------- clinician handoff */}
+
+        {/* The summary names itself (`aria-label` on its own section). */}
+        <motion.div variants={staggerChild} className="mt-12">
+          <AppointmentSummary checks={concussion} protocol={protocol} />
+        </motion.div>
+
+        {/* --------------------------------------------------------- neuroscience */}
+
+        <motion.div variants={staggerChild}>
+          <NeuroscienceNotes />
+        </motion.div>
 
         {/* ------------------------------------------------------------- evidence */}
 

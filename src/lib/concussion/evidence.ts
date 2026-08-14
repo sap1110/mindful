@@ -21,9 +21,13 @@
 export type EvidenceSourceId =
   | 'cdc'
   | 'amsterdam'
+  | 'living-guidelines'
+  | 'pedsconcussion'
   | 'concussion-alliance'
   | 'screen-time-rct'
   | 'aerobic-exercise'
+  | 'giza-hovda'
+  | 'ponsford'
 
 export interface EvidenceSource {
   id: EvidenceSourceId
@@ -46,6 +50,18 @@ export const EVIDENCE_SOURCES: Readonly<Record<EvidenceSourceId, EvidenceSource>
     what: 'The 6th International Consensus Statement on Concussion in Sport, Patricios et al., British Journal of Sports Medicine — the source of the graduated return-to-learn and return-to-sport strategies.',
     url: 'https://bjsm.bmj.com/content/57/11/695',
   },
+  'living-guidelines': {
+    id: 'living-guidelines',
+    name: 'Living Concussion Guidelines',
+    what: 'The Canadian living guideline for concussion and prolonged symptoms in adults 18 and over — re-reviewed against new evidence at least every six months.',
+    url: 'https://concussionsontario.org',
+  },
+  pedsconcussion: {
+    id: 'pedsconcussion',
+    name: 'PedsConcussion Living Guideline',
+    what: 'The living guideline for diagnosing and managing pediatric concussion — the reference for anyone under 18, where recovery differs from adults.',
+    url: 'https://pedsconcussion.com',
+  },
   'concussion-alliance': {
     id: 'concussion-alliance',
     name: 'Concussion Alliance',
@@ -63,6 +79,18 @@ export const EVIDENCE_SOURCES: Readonly<Record<EvidenceSourceId, EvidenceSource>
     name: 'Leddy et al., sub-symptom threshold aerobic exercise',
     what: 'Randomised evidence that light aerobic exercise below the level that worsens symptoms, started after the first 48 hours, speeds recovery.',
     url: 'https://pubmed.ncbi.nlm.nih.gov/30715132/',
+  },
+  'giza-hovda': {
+    id: 'giza-hovda',
+    name: 'Giza & Hovda, “The New Neurometabolic Cascade of Concussion” (Neurosurgery, 2014)',
+    what: 'The standard account of what happens in the brain after a concussion: ionic flux, an energy crisis, and a window of vulnerability.',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/25232881/',
+  },
+  ponsford: {
+    id: 'ponsford',
+    name: 'Ponsford et al. (J Neurol Neurosurg Psychiatry, 2002)',
+    what: 'Trial evidence that early education about concussion — what to expect, and that symptoms usually resolve — itself reduces ongoing symptoms.',
+    url: 'https://pubmed.ncbi.nlm.nih.gov/12185174/',
   },
 }
 
@@ -131,6 +159,18 @@ export const GUIDANCE: readonly Guidance[] = [
     body: 'Most people recover within two to four weeks. Symptoms continuing beyond about four weeks are described as persisting symptoms after concussion — which is common, is not a sign that you have done something wrong, and is a reason to be assessed rather than to keep waiting.',
     sourceId: 'amsterdam',
   },
+  {
+    id: 'living-guideline',
+    title: 'Prolonged symptoms have a whole guideline of their own',
+    body: 'The Living Concussion Guidelines cover assessment and management of concussion and prolonged symptoms in adults, domain by domain — headache, sleep, fatigue, mental health, return to activity — and are re-reviewed against new evidence at least every six months. If your recovery is taking longer than expected, this is the playbook your clinician is likely working from, and it is public.',
+    sourceId: 'living-guidelines',
+  },
+  {
+    id: 'pediatric',
+    title: 'Children and teenagers are not small adults here',
+    body: 'Under-18 recovery is covered by its own living guideline, PedsConcussion. The broad shape is the same — relative rest, then gradual return, school before sport — but the specifics differ, recovery tends to take longer in adolescents, and school support matters more. If this is about a child or teenager, involve a clinician early and use the pediatric guidance as the reference.',
+    sourceId: 'pedsconcussion',
+  },
 ]
 
 /**
@@ -142,6 +182,7 @@ export const GUIDANCE: readonly Guidance[] = [
  */
 export const LIMITATIONS: readonly string[] = [
   'This does not diagnose a concussion. Only a clinician can do that, and a normal-looking symptom score does not mean you have not had one.',
+  'It is built around guidance for adults. For anyone under 18, the PedsConcussion living guideline is the reference, recovery timelines differ, and a clinician should be involved early.',
   'This never clears you to return to contact or competition. That decision is a clinician’s, it is required before full-contact practice, and no app can make it for them.',
   'It knows nothing about your medical history, your medication, your previous head injuries, or how this one happened — all of which change the right plan.',
   'The stages here are the general published strategy. If a clinician has given you a different plan, theirs is the one to follow.',

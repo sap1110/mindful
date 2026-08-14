@@ -167,3 +167,34 @@
     );
   }
 }
+
+/* ============================================================================
+   Print — the appointment summary.
+
+   When someone prints the clinician summary, everything else on the page is
+   hidden and the summary is laid out plainly from the top of the sheet. The
+   `printing-summary` class is added to <body> by the summary's print button
+   and removed after printing, so an ordinary Ctrl+P on any other screen still
+   prints the page as seen.
+   ========================================================================== */
+
+@media print {
+  body.printing-summary * {
+    visibility: hidden;
+  }
+
+  body.printing-summary #appointment-summary,
+  body.printing-summary #appointment-summary * {
+    visibility: visible;
+  }
+
+  body.printing-summary #appointment-summary {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    padding: 1.5rem;
+    border: none;
+    box-shadow: none;
+    background: white;
+  }
+}
