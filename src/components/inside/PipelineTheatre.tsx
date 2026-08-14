@@ -1,6 +1,8 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { cn } from '../../lib/cn'
+import { EMERGENCY_ACTION } from '../../lib/concussion/redflags'
+import { ACUTE_HEADING } from '../../lib/echo/safety'
 import { runGuidePipeline, type GuideAnswer } from '../../lib/guide/pipeline'
 
 const EXAMPLES = [
@@ -126,8 +128,16 @@ export function PipelineTheatre() {
         </span>
       </div>
 
+      {/* What the person actually receives. The working comes after it. */}
+      <div className="mt-4" aria-live="polite">
+        <AnswerBody answer={answer} />
+      </div>
+
       {/* The trace, stage by stage. */}
-      <ol className="mt-5 space-y-2">
+      <h3 className="mt-7 font-sans text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle">
+        How it got there
+      </h3>
+      <ol className="mt-3 space-y-2">
         {answer.trace.map((stage, index) => {
           const copy = STAGE_COPY[stage.name] ?? { title: stage.name, blurb: '' }
           return (
@@ -175,6 +185,108 @@ export function PipelineTheatre() {
           {answer.response.sources.map((doc) => doc.org.split(' (')[0]).join(' · ')}
         </p>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * The answer itself — the part that was missing.
+ *
+ * The first version of this component rendered the trace and the verifier's
+ * numbers and stopped there, on the reasoning that the working *is* the
+ * argument. That was wrong: someone typing a real question into a box gets a
+ * list of processing stages back and reasonably concludes the thing is broken.
+ * The working only means anything next to the answer it produced.
+ *
+ * Deliberately the same content the /ask screen shows, in a smaller frame —
+ * this reads from `answer.response`, so it cannot show anything the product
+ * would not. The escalation and crisis wording is imported rather than
+ * rewritten for the same reason.
+ */
+function AnswerBody({ answer }: { answer: GuideAnswer }) {
+  if (answer.kind === 'crisis') {
+    return (
+      <div className="rounded-2xl bg-accent-soft/60 px-4 py-3.5">
+        <p className="font-medium text-text">{ACUTE_HEADING}</p>
+        <p className="mt-1.5 text-sm text-text-muted">
+          Retrieval is abandoned and crisis lines are shown instead — the search never runs.
+        </p>
+      </div>
+    )
+  }
+
+  if (answer.kind === 'escalate') {
+    return (
+      <div className="rounded-2xl bg-accent-soft/60 px-4 py-3.5">
+        <p className="font-medium text-text">This could be an emergency</p>
+        <p className="mt-1.5 text-sm text-text">{EMERGENCY_ACTION}</p>
+        <p className="mt-1.5 text-sm text-text-muted">
+          No education is offered over the top of that, and nothing is searched.
+        </p>
+      </div>
+    )
+  }
+
+  if (answer.kind === 'clarify') {
+    return (
+      <div className="rounded-2xl bg-surface-muted px-4 py-3.5">
+        <p className="font-medium text-text">
+          {answer.intent.intent === 'out-of-scope'
+            ? 'That needs a professional, not an app'
+            : 'A little more detail first'}
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {answer.clarifyingQuestions.map((question) => (
+            <li key={question} className="flex gap-2 text-sm text-text-muted">
+              <span aria-hidden="true" className="select-none text-text-subtle">
+                ·
+              </span>
+              <span>{question}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  const response = answer.response
+  if (!response) return null
+
+  return (
+    <div className="rounded-2xl bg-surface-muted px-4 py-3.5">
+      {response.directAnswer.map((claim) => (
+        <p
+          key={claim.text}
+          className={cn(
+            'max-w-prose text-[0.9375rem] first:mt-0',
+            claim.kind === 'evidence' ? 'mt-2.5 text-text' : 'mt-2.5 text-text-muted',
+          )}
+        >
+          {claim.text}
+        </p>
+      ))}
+
+      {/*
+        Two sentences of evidence, not the whole answer. This is a sample of
+        the product, and a landing page that reprinted every citation would be
+        making the case at the reader rather than to them.
+      */}
+      {response.evidenceSays.slice(0, 2).map((claim) => {
+        const doc = response.sources.find((source) => source.id === claim.docId)
+        return (
+          <blockquote
+            key={claim.text}
+            className="mt-3 border-l-2 border-border-strong pl-3.5 text-sm text-text-muted"
+          >
+            {claim.text}
+            {doc ? (
+              <cite className="mt-1 block not-italic text-text-subtle">
+                — {doc.org.split(' (')[0]}
+              </cite>
+            ) : null}
+          </blockquote>
+        )
+      })}
     </div>
   )
 }

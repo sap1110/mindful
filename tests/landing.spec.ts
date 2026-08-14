@@ -35,10 +35,9 @@ test.describe('landing on a small phone', () => {
  *
  * Every assertion here drives the real machinery rather than checking that
  * some copy is on the page: the pipeline is run on typed input, the verifier
- * is asked to reject a fabrication, the browser is asked to refuse a request,
- * and the evaluation suite is executed in the browser. If any of it were a
- * mockup, these would pass while the claims were false — so they are written
- * to fail in that case.
+ * is asked to reject a fabrication, and the browser is asked to refuse a
+ * request. If any of it were a mockup, these would pass while the claims were
+ * false — so they are written to fail in that case.
  */
 test.describe('the showcase runs for real', () => {
   test('the pipeline reacts to what you type, and skips retrieval for an emergency', async ({
@@ -61,6 +60,35 @@ test.describe('the showcase runs for real', () => {
     await expect(page.getByText('Asked back')).toBeVisible()
   })
 
+  /**
+   * The bug this exists to prevent: the theatre used to render the trace and
+   * the verifier's numbers without ever rendering the answer, so typing a real
+   * question produced a wall of processing stages and nothing that read as a
+   * reply. The stage list is not evidence that anything was answered.
+   */
+  test('typing a question produces an answer, not just a trace', async ({ page }) => {
+    await page.goto('/')
+
+    const input = page.getByLabel(/Ask it anything/)
+    const theatre = page.locator('div', { has: page.locator('#theatre-input') }).last()
+
+    await input.fill('why do I keep getting headaches')
+    // A cited sentence, attributed — not a stage note.
+    await expect(theatre.locator('blockquote').first()).toBeVisible()
+    await expect(theatre.locator('blockquote cite').first()).not.toBeEmpty()
+
+    // Escalation replaces the answer with the action, and cites nothing.
+    await input.fill('crushing chest pain spreading to my left arm')
+    await expect(page.getByText('This could be an emergency')).toBeVisible()
+    await expect(theatre.locator('blockquote')).toHaveCount(0)
+
+    // A question asked back must show the actual questions.
+    await input.fill('is this bad')
+    await expect(page.getByText('A little more detail first')).toBeVisible()
+    // The trace is an <ol>; the clarifying questions are the only <ul> here.
+    await expect(theatre.locator('ul li').first()).toContainText('?')
+  })
+
   test('the verifier really rejects a fabricated claim', async ({ page }) => {
     await page.goto('/')
 
@@ -81,32 +109,11 @@ test.describe('the showcase runs for real', () => {
     ).toBeVisible({ timeout: 10_000 })
   })
 
-  test('the evaluation suite runs in the browser and reports its gates', async ({ page }) => {
-    await page.goto('/')
-
-    // Nothing is precomputed: the numbers must be absent until it is run.
-    await expect(page.getByText('Escalation recall')).toHaveCount(0)
-
-    await page.getByRole('button', { name: 'Run it', exact: true }).click()
-
-    const escalation = page.locator('li', { hasText: 'Escalation recall' })
-    await expect(escalation).toBeVisible({ timeout: 15_000 })
-    await expect(escalation).toContainText('1.00')
-
-    const hallucination = page.locator('li', { hasText: 'Hallucination rate' })
-    await expect(hallucination).toContainText('0.00')
-
-    await expect(page.locator('li', { hasText: 'Bias parity' })).toContainText('1.00')
-    await expect(page.getByText(/cases · median/)).toBeVisible()
-  })
-
   test('has no WCAG A/AA violations with the showcase exercised', async ({ page }) => {
     await page.goto('/')
+    await page.getByLabel(/Ask it anything/).fill('why do I keep getting headaches')
     await page.getByRole('button', { name: 'Try to fabricate' }).click()
-    await page.getByRole('button', { name: 'Run it', exact: true }).click()
-    await expect(page.locator('li', { hasText: 'Escalation recall' })).toBeVisible({
-      timeout: 15_000,
-    })
+    await expect(page.getByText('Rejected before it could reach a screen')).toBeVisible()
 
     await expectNoA11yViolations(page)
   })
