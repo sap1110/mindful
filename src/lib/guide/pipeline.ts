@@ -86,14 +86,39 @@ const CLARIFY_FLOOR = 0.06
 const MAX_SOURCES = 3
 
 /**
- * Content words a question needs before an unlabelled one is worth answering.
+ * Content words a question needs before it is worth searching for at all.
  *
- * "is this bad" is three words and one of them survives stopword removal. No
- * amount of evidence makes that answerable, and answering it anyway — which a
- * 300-document corpus will always let you do — is how a careful system starts
- * sounding like a search engine.
+ * "is this bad" and "it hurts" carry one word each once the stopwords go. No
+ * amount of evidence makes those answerable, and a 300-document corpus will
+ * always find *something* for any three words — which is how a careful system
+ * starts sounding like a search engine.
+ *
+ * Three, counted *after* removing placeholders. "why do I keep getting
+ * headaches" clears it on keep/getting/headache; "my friend has a thing on
+ * their arm" does not, because `thing` is exactly the word that should have
+ * carried the question and instead stands in for it.
  */
-const MIN_ANSWERABLE_WORDS = 4
+const MIN_ANSWERABLE_WORDS = 3
+
+/**
+ * Words that occupy the place of the thing being asked about without naming
+ * it. Counted out before the floor is applied, because a question whose
+ * subject is "a thing" has not been asked yet — and retrieval will happily
+ * find something anyway, which is the trap.
+ */
+const PLACEHOLDER_TERMS = new Set([
+  'thing',
+  'things',
+  'something',
+  'someth',
+  'stuff',
+  'issue',
+  'issues',
+  'problem',
+  'problems',
+  'matter',
+  'situation',
+])
 
 const CLARIFYING_QUESTIONS = [
   'What is the main thing you are feeling or asking about, in a sentence?',
@@ -154,10 +179,8 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
    * will always find *something* for any three words, so vagueness is measured
    * on the question rather than inferred from a failed classification.
    */
-  const contentWords = tokenize(trimmed).size
-  const tooVague =
-    risk.level === 'unknown' ||
-    (intent.intent === 'unclear' && contentWords < MIN_ANSWERABLE_WORDS)
+  const contentWords = [...tokenize(trimmed)].filter((term) => !PLACEHOLDER_TERMS.has(term)).length
+  const tooVague = risk.level === 'unknown' || contentWords < MIN_ANSWERABLE_WORDS
 
   if (tooVague) {
     trace.push({

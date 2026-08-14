@@ -36,7 +36,7 @@ Built solo for **Hack for Humanity, Summer 2026**.
 
 | Screen | What it is |
 | ------ | ---------- |
-| **Landing** | Sets the tone, with a live 4-2-6 breathing element |
+| **Landing** | Sets the tone, and showcases the pipeline live — type a question and watch it run, try to make it fabricate, try to exfiltrate, run the evaluation suite in your browser |
 | **Onboarding** | Name → what brings you here → coping style. Completing it is what "signed in" means |
 | **Home** | Your space, with a greeting shaped by the profile |
 | **Mood** | A daily check-in with tags and an optional note. One entry a day, editable, 30 days of history |
@@ -600,7 +600,7 @@ dimmed eyes-closed session.
 
 ## Testing
 
-**183 Playwright tests** across 16 spec files, each screen covered empty and
+**227 Playwright tests** across 16 spec files, each screen covered empty and
 filled, every screen ending in an axe WCAG 2.1 A/AA scan.
 
 ```bash

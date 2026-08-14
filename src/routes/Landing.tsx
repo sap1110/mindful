@@ -2,6 +2,9 @@ import { motion } from 'framer-motion'
 import { ArrowRight, Leaf, Lock, NotebookPen, Waves } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { BreathingHalo } from '../components/BreathingHalo'
+import { BreakIt } from '../components/inside/BreakIt'
+import { MeasuredNumbers } from '../components/inside/MeasuredNumbers'
+import { PipelineTheatre } from '../components/inside/PipelineTheatre'
 import { MoodPreview } from '../components/landing/MoodPreview'
 import { OneBreath } from '../components/landing/OneBreath'
 import { PageShell } from '../components/PageShell'
@@ -148,6 +151,66 @@ export function Landing() {
           </div>
         </motion.div>
       </motion.div>
+
+      {/* ------------------------------------------------------ the showcase */}
+      {/*
+        The centre of gravity of this page, and deliberately placed after the
+        product rather than before it: the argument only lands once someone
+        knows what the thing is.
+
+        Everything in this section is live. The pipeline runs, the verifier
+        rejects, the browser refuses the request, the evaluation suite executes.
+        A page that made these claims in prose would be indistinguishable from
+        every other health app that makes them, which is exactly the problem it
+        exists to solve.
+      */}
+      <motion.section
+        variants={staggerParent}
+        initial="hidden"
+        animate="visible"
+        aria-labelledby="showcase-heading"
+        className="mt-24 sm:mt-28"
+      >
+        <motion.p
+          variants={staggerChild}
+          className="text-xs font-semibold uppercase tracking-[0.14em] text-primary"
+        >
+          Under the hood
+        </motion.p>
+
+        <motion.h2
+          variants={staggerChild}
+          id="showcase-heading"
+          className="mt-3 max-w-prose text-display-xs text-text sm:text-display-sm"
+        >
+          An AI that cannot invent, on a device that cannot leak.
+        </motion.h2>
+
+        <motion.p variants={staggerChild} className="mt-4 max-w-prose text-lg text-text-muted">
+          Both are ordinary things to claim. Neither is checkable from a marketing page — so
+          everything below is running for real, in this tab, on your machine. Break it if you can.
+        </motion.p>
+
+        <motion.div variants={staggerChild} className="mt-8">
+          <PipelineTheatre />
+        </motion.div>
+
+        <motion.div variants={staggerChild} className="mt-5">
+          <BreakIt />
+        </motion.div>
+
+        <motion.div variants={staggerChild} className="mt-5">
+          <MeasuredNumbers />
+        </motion.div>
+
+        <motion.p variants={staggerChild} className="mt-6 max-w-prose text-sm text-text-subtle">
+          The answer is assembled from documents published by the NHS, the CDC, the WHO,
+          MedlinePlus and the NIH — every sentence lifted verbatim and carrying the link it came
+          from. There is no language model writing prose about anyone&rsquo;s health, which is why
+          the invented-claim rate is a structural zero rather than a low number someone is
+          monitoring.
+        </motion.p>
+      </motion.section>
 
       {/* Three pillars — the shape of what Mindful does, in one glance. */}
       <motion.ul

@@ -180,8 +180,29 @@ test.describe('nothing leaves the device', () => {
     await page.goto('/')
     await expectNoA11yViolations(page)
 
+    // Asserted from the stylesheet rather than from network traffic: a warm
+    // font cache means no request is made at all, which made this flake under
+    // parallel load while proving nothing either way.
+    const faces = await page.evaluate(() =>
+      [...document.styleSheets]
+        .flatMap((sheet) => {
+          try {
+            return [...sheet.cssRules]
+          } catch {
+            return [] // cross-origin sheet — none expected, and none readable
+          }
+        })
+        .filter((rule): rule is CSSFontFaceRule => rule instanceof CSSFontFaceRule)
+        .map((rule) => rule.style.getPropertyValue('src')),
+    )
+
+    expect(faces.length).toBeGreaterThan(0)
+    for (const src of faces) {
+      expect(src, 'a font is declared against a remote host').not.toMatch(/https?:\/\//)
+    }
+
+    // Any font that *was* fetched this run must still have come from here.
     const fonts = seen.urls.filter((url) => /\.(woff2?|ttf|otf)(\?|$)/.test(url))
-    expect(fonts.length).toBeGreaterThan(0)
     for (const font of fonts) {
       expect(font).toContain(ALLOWED_ORIGIN)
     }
