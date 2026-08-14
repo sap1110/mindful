@@ -3,13 +3,20 @@ import { Pause, Play, Square } from 'lucide-react'
 import { useState } from 'react'
 import { AppNav } from '../components/AppNav'
 import { BreathGuideText } from '../components/breathe/BreathGuideText'
+import { EyesClosedConsent } from '../components/breathe/EyesClosedConsent'
+import { EyesClosedSession } from '../components/breathe/EyesClosedSession'
+import { SafetyNotes } from '../components/breathe/SafetyNotes'
+import { VoiceGuidePanel } from '../components/breathe/VoiceGuidePanel'
 import { BreathingHalo } from '../components/BreathingHalo'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Chip } from '../components/ui/Chip'
+import { useBreathCues } from '../hooks/useBreathCues'
 import { useBreathingSession } from '../hooks/useBreathingSession'
 import { useMindfulData } from '../hooks/useMindfulData'
+import { useVoiceGuide } from '../hooks/useVoiceGuide'
+import { useWakeLock } from '../hooks/useWakeLock'
 import {
   BREATHING_PATTERNS,
   DEFAULT_PATTERN_ID,
@@ -29,6 +36,14 @@ import { staggerChild, staggerParent } from '../lib/motion'
  * never disagree. Everything the animation says is also said in text, and when
  * the device asks for reduced motion the animation is *replaced* by a text
  * guide that paces the session identically — not simply switched off.
+ *
+ * The spoken guide is the third rendering of that same clock. With it on, the
+ * screen stops being required at all: eyes-closed mode dims the display, hands
+ * pacing to an on-device voice, and turns the whole surface into one pause
+ * target, because someone with their eyes shut cannot aim. Safety comes with
+ * it rather than after it — the cautions for the chosen rhythm are on screen
+ * before Begin, the eyes-closed checks are confirmed once before the first
+ * dark session, and the dizziness reminder is spoken every single time.
  */
 export function Breathe() {
   const prefersReducedMotion = useReducedMotion()
@@ -36,17 +51,50 @@ export function Breathe() {
 
   const [patternId, setPatternId] = useState<string>(DEFAULT_PATTERN_ID)
   const [lengthId, setLengthId] = useState<SessionLengthId>('medium')
+  const [askingConsent, setAskingConsent] = useState(false)
 
   const pattern = breathingPattern(patternId)
   const length = sessionLength(lengthId)
   const session = useBreathingSession(pattern, length.minutes)
+  const guide = useVoiceGuide()
+
+  const voiceOn = guide.available && guide.prefs.enabled
+  const eyesClosed = voiceOn && guide.prefs.eyesClosed
+
+  const cues = useBreathCues({
+    session,
+    guide,
+    pattern,
+    minutes: length.minutes,
+    eyesClosed,
+  })
 
   const isRunning = session.status === 'running'
   const isPaused = session.status === 'paused'
   const isComplete = session.status === 'complete'
-  const isChoosing = session.status === 'idle'
+  const isChoosing = session.status === 'idle' && !cues.preparing
 
+  // A session nobody is watching is a session the phone will try to sleep
+  // through, taking the voice with it.
+  useWakeLock(eyesClosed && (isRunning || isPaused || cues.preparing))
+
+  const inDarkSession = eyesClosed && (isRunning || isPaused || cues.preparing)
   const recent = breathing.slice(0, 4)
+
+  /** Begin — via the one-time safety check when the screen is about to go dark. */
+  function handleBegin() {
+    if (eyesClosed && !guide.prefs.eyesClosedAcknowledged) {
+      setAskingConsent(true)
+      return
+    }
+    cues.begin()
+  }
+
+  function handleConsent() {
+    guide.acknowledgeEyesClosed()
+    setAskingConsent(false)
+    cues.begin()
+  }
 
   return (
     <PageShell nav={<AppNav />}>
@@ -56,14 +104,16 @@ export function Breathe() {
         </motion.h1>
 
         <motion.p variants={staggerChild} className="mt-3 max-w-prose text-lg text-text-muted">
-          {prefersReducedMotion
-            ? 'Pick a rhythm and follow the words. Stop whenever you like.'
-            : 'Pick a rhythm and follow the circle. Stop whenever you like.'}
+          {eyesClosed
+            ? 'Pick a rhythm. A voice on this device will lead it, so you can close your eyes. Stop whenever you like.'
+            : prefersReducedMotion
+              ? 'Pick a rhythm and follow the words. Stop whenever you like.'
+              : 'Pick a rhythm and follow the circle. Stop whenever you like.'}
         </motion.p>
 
         <motion.section variants={staggerChild} className="mt-8" aria-labelledby="pattern-heading">
           <h2 id="pattern-heading" className="sr-only">
-            Choose a rhythm and a length
+            Choose a rhythm, a length, and how it guides you
           </h2>
 
           <fieldset className="border-0 p-0" disabled={!isChoosing}>
@@ -102,7 +152,13 @@ export function Breathe() {
               ))}
             </div>
           </fieldset>
+
+          <VoiceGuidePanel guide={guide} disabled={!isChoosing} className="mt-6" />
         </motion.section>
+
+        <motion.div variants={staggerChild}>
+          <SafetyNotes pattern={pattern} className="mt-8" />
+        </motion.div>
 
         <motion.section variants={staggerChild} className="mt-9" aria-labelledby="session-heading">
           <h2 id="session-heading" className="sr-only">
@@ -135,10 +191,25 @@ export function Breathe() {
               />
             )}
 
-            {/* The phase in text, always — the animation is never the only cue. */}
+            {/*
+              The phase in text, always — the animation is never the only cue.
+              The live region steps aside when the voice is on: the step is
+              already being announced aloud, and hearing it twice, once from the
+              app and once from a screen reader, would be worse than either.
+            */}
             <p className="mt-4 text-center text-lg text-text">
-              <span aria-live="polite" aria-atomic="true" className="font-medium">
-                {isRunning ? session.phase.label : isPaused ? 'Paused' : 'Not started'}
+              <span
+                aria-live={voiceOn ? 'off' : 'polite'}
+                aria-atomic="true"
+                className="font-medium"
+              >
+                {cues.preparing
+                  ? 'Getting ready'
+                  : isRunning
+                    ? session.phase.label
+                    : isPaused
+                      ? 'Paused'
+                      : 'Not started'}
               </span>
               {isRunning || isPaused ? (
                 <span className="text-text-muted"> · {session.secondsLeft}s left in this step</span>
@@ -150,10 +221,22 @@ export function Breathe() {
               {session.elapsedMs > 0 ? ` · ${formatDuration(session.elapsedMs)} so far` : null}
             </p>
 
+            {voiceOn && !eyesClosed && (isChoosing || isRunning || isPaused) ? (
+              <p className="mt-2 text-center text-sm text-primary">
+                The voice is on — you can close your eyes and listen instead of watching.
+              </p>
+            ) : null}
+
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               {isChoosing ? (
-                <Button size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={session.start}>
+                <Button size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={handleBegin}>
                   Begin
+                </Button>
+              ) : null}
+
+              {cues.preparing ? (
+                <Button size="lg" variant="secondary" onClick={cues.cancelPreparing}>
+                  Cancel
                 </Button>
               ) : null}
 
@@ -162,14 +245,14 @@ export function Breathe() {
                   size="lg"
                   variant="secondary"
                   iconLeft={<Pause className="h-4 w-4" />}
-                  onClick={session.pause}
+                  onClick={cues.pause}
                 >
                   Pause
                 </Button>
               ) : null}
 
               {isPaused ? (
-                <Button size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={session.resume}>
+                <Button size="lg" iconLeft={<Play className="h-4 w-4" />} onClick={cues.resume}>
                   Resume
                 </Button>
               ) : null}
@@ -179,7 +262,7 @@ export function Breathe() {
                   size="lg"
                   variant="secondary"
                   iconLeft={<Square className="h-4 w-4" />}
-                  onClick={session.stop}
+                  onClick={cues.stop}
                 >
                   Stop
                 </Button>
@@ -205,7 +288,7 @@ export function Breathe() {
             </p>
 
             <p className="mt-2 text-center text-sm text-text-subtle">
-              No sound, no streaks here. Stopping early still counts as breathing.
+              No streaks here, and the voice is optional. Stopping early still counts as breathing.
             </p>
           </Card>
         </motion.section>
@@ -237,6 +320,23 @@ export function Breathe() {
           </motion.section>
         ) : null}
       </motion.div>
+
+      {askingConsent ? (
+        <EyesClosedConsent onConfirm={handleConsent} onCancel={() => setAskingConsent(false)} />
+      ) : null}
+
+      {inDarkSession ? (
+        <EyesClosedSession
+          stage={cues.preparing ? 'lead-in' : isPaused ? 'paused' : 'running'}
+          phaseLabel={session.phase.label}
+          secondsLeft={session.secondsLeft}
+          round={session.round}
+          totalRounds={session.totalRounds}
+          onToggle={isPaused ? cues.resume : cues.pause}
+          onStop={cues.stop}
+          onCancel={cues.cancelPreparing}
+        />
+      ) : null}
     </PageShell>
   )
 }

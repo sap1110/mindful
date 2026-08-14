@@ -34,6 +34,8 @@ export const STORAGE_KEYS = {
   sample: 'mindful.v1.sample',
   /** The day whose journal prompt was dismissed, so it stays dismissed. */
   promptDismissed: 'mindful.v1.journal.promptDismissed',
+  /** How the spoken breathing guide is set up on *this* device. */
+  voice: 'mindful.v1.breathing.voice',
 } as const
 
 /* ----------------------------------------------------------------- types */
@@ -482,6 +484,56 @@ export function recordBreathingSession(input: BreathingInput): BreathingSession 
   stampSchema()
   emit()
   return session
+}
+
+/* ------------------------------------------------------- voice guide prefs */
+
+/**
+ * How the spoken guide is set up. Deliberately *not* part of the export
+ * bundle: a voice id names a voice installed on this particular machine, so
+ * carrying it to another one would restore a preference that cannot be met.
+ */
+export interface VoicePrefs {
+  enabled: boolean
+  /** The chosen platform voice, or null for "whichever this device suggests". */
+  voiceId: string | null
+  /** Dim the screen and hand the whole session over to the voice. */
+  eyesClosed: boolean
+  /**
+   * The safety checks for breathing with your eyes shut have been read and
+   * confirmed on this device. Asked once: a confirmation shown every single
+   * time is one people learn to dismiss without reading.
+   */
+  eyesClosedAcknowledged: boolean
+}
+
+export const DEFAULT_VOICE_PREFS: VoicePrefs = {
+  enabled: false,
+  voiceId: null,
+  eyesClosed: false,
+  eyesClosedAcknowledged: false,
+}
+
+export function readVoicePrefs(): VoicePrefs {
+  const raw = readRaw(STORAGE_KEYS.voice)
+  if (!raw) return DEFAULT_VOICE_PREFS
+
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed)) return DEFAULT_VOICE_PREFS
+    return {
+      enabled: parsed.enabled === true,
+      voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : null,
+      eyesClosed: parsed.eyesClosed === true,
+      eyesClosedAcknowledged: parsed.eyesClosedAcknowledged === true,
+    }
+  } catch {
+    return DEFAULT_VOICE_PREFS
+  }
+}
+
+export function saveVoicePrefs(prefs: VoicePrefs): void {
+  writeRaw(STORAGE_KEYS.voice, JSON.stringify(prefs))
 }
 
 /* ----------------------------------------------------------- screener API */

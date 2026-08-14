@@ -30,6 +30,78 @@ export async function seedProfile(page: Page): Promise<void> {
   )
 }
 
+export const VOICE_KEY = 'mindful.v1.breathing.voice'
+
+/**
+ * A fake on-device speech engine, installed before the app boots.
+ *
+ * Headless browsers ship no system voices at all, so without this the spoken
+ * guide correctly reports itself unavailable and there is nothing to test. The
+ * stub reports one `localService` voice and records every line it is asked to
+ * say, which is the part worth asserting on: *what* the guide says, and in what
+ * order. `SpeechSynthesisUtterance` is replaced too — the real one rejects a
+ * `voice` that is not a genuine `SpeechSynthesisVoice`.
+ */
+export async function stubVoices(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const spoken: string[] = []
+    ;(window as unknown as { __spoken: string[] }).__spoken = spoken
+
+    const voices = [
+      { voiceURI: 'test-calm', name: 'Test Calm', lang: 'en-GB', localService: true, default: true },
+      { voiceURI: 'test-plain', name: 'Test Plain', lang: 'en-US', localService: true, default: false },
+      // Filtered out by the app: cloud-backed voices would mean a network call.
+      { voiceURI: 'test-remote', name: 'Google Remote', lang: 'en-US', localService: false, default: false },
+    ]
+
+    class FakeUtterance {
+      text: string
+      voice: unknown = null
+      lang = ''
+      rate = 1
+      pitch = 1
+      volume = 1
+      onend: (() => void) | null = null
+      onerror: (() => void) | null = null
+      constructor(text: string) {
+        this.text = text
+      }
+    }
+
+    const fake = {
+      getVoices: () => voices,
+      speak: (utterance: FakeUtterance) => {
+        spoken.push(utterance.text)
+        // Roughly how long a real voice would take. The lead-in has to last
+        // long enough to be a stage the app is actually in, or a test can
+        // never catch the screen that says "close your eyes".
+        const ms = Math.max(50, Math.min(2_500, utterance.text.length * 10))
+        window.setTimeout(() => utterance.onend?.(), ms)
+      },
+      cancel: () => {},
+      pause: () => {},
+      resume: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      speaking: false,
+      pending: false,
+      paused: false,
+    }
+
+    Object.defineProperty(window, 'speechSynthesis', { value: fake, configurable: true })
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      value: FakeUtterance,
+      configurable: true,
+      writable: true,
+    })
+  })
+}
+
+/** Everything the guide has said so far, oldest first. */
+export async function spokenLines(page: Page): Promise<string[]> {
+  return page.evaluate(() => (window as unknown as { __spoken: string[] }).__spoken ?? [])
+}
+
 /** Today in the browser's timezone, formatted the way storage stores it. */
 export function todayISO(): string {
   const now = new Date()
