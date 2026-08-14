@@ -22,6 +22,8 @@
  * Nothing here is logged, scored or kept.
  */
 
+import { normaliseText } from './keyword'
+
 /** How the app must respond, whatever the retrieval would have returned. */
 export type RiskLevel = 'none' | 'concern' | 'acute'
 
@@ -40,18 +42,40 @@ export interface RiskAssessment {
  * Loose patterns rather than exact phrases, because distress is not
  * well-punctuated: "i dont want to be here anymore" has to match as surely as
  * a tidy sentence does. Apostrophes are optional throughout for that reason.
+ *
+ * The list is written in the language people actually use, not the language of
+ * a textbook. That includes the abbreviations and euphemisms that a decade of
+ * platform moderation has trained people into — "kms", "unalive" — which are
+ * now, for many young people, the *primary* way this is said. A guard that
+ * only understood the clinical phrasing would work worst for exactly the
+ * group at highest risk, and being coy about listing these words in source
+ * code would be choosing our comfort over their safety.
  */
 const ACUTE_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['suicide-direct', /\b(kill|killing)\s+(myself|my\s?self)\b/i],
   ['suicide-noun', /\b(suicide|suicidal)\b/i],
+  // The moderation-era euphemisms and abbreviations.
+  ['kms', /\bkms\b/i],
+  ['unalive', /\bunaliv(e|es|ed|ing)\b/i],
+  ['off-myself', /\b(off|offing)\s+myself\b/i],
   ['end-my-life', /\b(end|ending|take|taking)\s+my\s+(own\s+)?life\b/i],
-  ['better-off-dead', /\b(better\s+off\s+dead|rather\s+be\s+dead|want\s+to\s+be\s+dead)\b/i],
+  [
+    'want-to-die',
+    /\b(want|wanted|wanting|wish|wished|wishing)\s+to\s+(die|be\s+dead)\b/i,
+  ],
+  ['wish-i-was-dead', /\bwish\s+i\s+(was|were)\s+dead\b/i],
+  ['better-off-dead', /\b(better\s+off\s+dead|rather\s+be\s+dead)\b/i],
   [
     'dont-want-to-live',
     /\b(do\s?n[o’']?t|dont|don’t)\s+want\s+to\s+(live|be\s+here|exist|wake\s+up)\b/i,
   ],
-  ['self-harm', /\b(hurt|harm|harming|cut|cutting|injure)\s+(myself|my\s?self)\b/i],
+  [
+    'self-harm',
+    /\b(hurt|hurting|harm|harming|harmed|cut|cutting|injure|injuring)\s+(myself|my\s?self)\b/i,
+  ],
+  ['self-harm-noun', /\bself[-\s]?harm(ing|ed)?\b/i],
   ['no-point', /\bno\s+(point|reason)\s+(in\s+)?(living|going\s+on|carrying\s+on)\b/i],
+  ['not-worth-living', /\bnot\s+worth\s+living\b/i],
   ['plan', /\b(plan|method)\s+to\s+(die|kill\s+myself|end\s+it)\b/i],
   ['end-it-all', /\bend(ing)?\s+it\s+all\b/i],
   ['overdose', /\b(overdose|od)\s+(on|myself)\b/i],
@@ -78,9 +102,15 @@ const CONCERN_PATTERNS: readonly (readonly [string, RegExp])[] = [
 /**
  * Assess what someone has just typed. Acute wins over concern, and the first
  * acute match short-circuits. Order within each list carries no meaning.
+ *
+ * The input is canonicalised through the same contraction folding the search
+ * uses (`normaliseText`), so "i dont wanna be here anymore" is assessed as
+ * "i do not want to be here anymore". This matters more here than anywhere in
+ * retrieval: a search that misses a phrasing shows a smaller answer, while a
+ * risk guard that misses one hands a person in crisis a list of diary entries.
  */
 export function assessRisk(text: string): RiskAssessment {
-  const normalised = text.normalize('NFKC')
+  const normalised = normaliseText(text.normalize('NFKC'))
 
   for (const [name, pattern] of ACUTE_PATTERNS) {
     if (pattern.test(normalised)) return { level: 'acute', matched: name }
