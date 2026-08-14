@@ -13,8 +13,21 @@ import { vectorise } from './features'
  * which is what lets a prediction explain itself with the words that drove it
  * instead of a saliency map nobody can check.
  *
- * Everything is deterministic: a seeded shuffle, fixed epochs, no dropout.
- * `npm run train` twice produces byte-identical output.
+ * The fitting itself is deterministic — a seeded shuffle, fixed epochs, no
+ * dropout — and the lexical heads are byte-identical across runs because
+ * nothing upstream of them is random either.
+ *
+ * The *embedding* heads are not, and it is worth knowing why rather than
+ * assuming they are. Their features come from a quantised ONNX encoder whose
+ * floating-point reductions depend on thread scheduling, so the same sentence
+ * embeds slightly differently between runs. Four thousand epochs of gradient
+ * descent amplify that into visibly different weights that describe the same
+ * decision boundary — in the run that established this, 3,429 of 3,456 weights
+ * changed while the held-out macro-F1 stayed identical to three decimals.
+ *
+ * So: the *behaviour* is reproducible, the bytes are not. A diff in an
+ * embedding artefact means very little on its own; the metrics printed beside
+ * it are what to compare.
  */
 
 export interface TrainedModel {
