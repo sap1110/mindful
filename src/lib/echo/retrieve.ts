@@ -144,6 +144,12 @@ export interface PersonalMatch {
   passage: Passage
   score: number
   trajectory: TrajectoryReading
+  /**
+   * Why this is on screen, in plain words, written by `pipeline.ts` and shown
+   * to the person. A retrieval someone cannot interrogate is one they have to
+   * take on faith, which is not what this app asks of anyone.
+   */
+  why?: string[]
 }
 
 export interface LibraryMatch {
@@ -169,56 +175,12 @@ export interface IndexedCard {
   vector: Float32Array
 }
 
-/**
- * Rank both corpora against one query vector.
- *
- * Library results are always computed, but the UI leads with personal ones when
- * there are any — being shown your own words is the whole point, and generic
- * advice offered first would read as the app changing the subject.
+/*
+ * Ranking itself now lives in `pipeline.ts`, which runs this arm alongside a
+ * lexical one and fuses the two. What stays here is everything that is true of
+ * a result however it was found: the thresholds, the shape of a match, and the
+ * trajectory reading that turns an entry into "and then what happened".
  */
-export function retrieve(
-  query: Float32Array,
-  passages: readonly IndexedPassage[],
-  cards: readonly IndexedCard[],
-  moods: readonly MoodEntry[],
-): RetrievalResult {
-  const personal = passages
-    .map((entry) => ({
-      kind: 'personal' as const,
-      passage: entry.passage,
-      score: similarity(query, entry.vector),
-      trajectory: readTrajectory(entry.passage, moods),
-    }))
-    .filter((match) => match.score >= MIN_RELEVANCE)
-    .sort((a, b) => b.score - a.score)
-
-  // One match per entry: three chunks of the same long journal entry is one
-  // memory, not three, and listing it three times would overstate the echo.
-  const seen = new Set<string>()
-  const dedupedPersonal = personal
-    .filter((match) => {
-      if (seen.has(match.passage.entryId)) return false
-      seen.add(match.passage.entryId)
-      return true
-    })
-    .slice(0, MAX_PERSONAL_RESULTS)
-
-  const library = cards
-    .map((entry) => ({
-      kind: 'library' as const,
-      card: entry.card,
-      score: similarity(query, entry.vector),
-    }))
-    .filter((match) => match.score >= MIN_LIBRARY_RELEVANCE)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_LIBRARY_RESULTS)
-
-  return {
-    personal: dedupedPersonal,
-    library,
-    searchedButFoundNothing: passages.length > 0 && dedupedPersonal.length === 0,
-  }
-}
 
 /** Headline for a set of results. Never claims a pattern it has not found. */
 export function summarise(result: RetrievalResult, data: MindfulData): string {

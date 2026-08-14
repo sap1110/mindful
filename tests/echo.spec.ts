@@ -114,7 +114,16 @@ test.describe('echo', () => {
     await expect(page.getByText(/In the two weeks after that/)).toBeVisible()
 
     // And the app is honest that this was a word match, not a meaning match.
-    await expect(page.getByText(/Matched on the words you used, not their meaning/)).toBeVisible()
+    await expect(page.getByText(/Searched on the words you used, not their meaning/)).toBeVisible()
+
+    // The result explains itself, and the pipeline publishes its working.
+    await expect(page.getByText(/Why this one:/)).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'How this answer was put together' }),
+    ).toBeVisible()
+    await expect(
+      page.getByText('Checked every result against your stored entries'),
+    ).toBeVisible()
   })
 
   test('does not invent a match when nothing is close', async ({ page }) => {

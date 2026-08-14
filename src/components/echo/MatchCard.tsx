@@ -48,6 +48,18 @@ export function MatchCard({ match, className }: MatchCardProps) {
       >
         {describeTrajectory(trajectory)}
       </p>
+
+      {/*
+        Why this one. Retrieval that cannot be questioned has to be taken on
+        faith, and "the computer decided this resembles you" is exactly the kind
+        of claim this app should never ask anyone to accept unexamined.
+      */}
+      {match.why && match.why.length > 0 ? (
+        <p className="mt-3 text-sm text-text-subtle">
+          <span className="font-medium text-text-muted">Why this one:</span>{' '}
+          {match.why.join(' ')}
+        </p>
+      ) : null}
     </Card>
   )
 }

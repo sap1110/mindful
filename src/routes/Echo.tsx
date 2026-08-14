@@ -16,6 +16,17 @@ import { staggerChild, staggerParent } from '../lib/motion'
 
 const PLACEHOLDER = 'Everything feels like too much today and I cannot work out why.'
 
+/** The pipeline's stage names, in the language of the person reading them. */
+const STAGE_LABELS: Record<string, string> = {
+  guard: 'Checked what you typed for signs of crisis',
+  expand: 'Read your words',
+  retrieve: 'Searched your entries',
+  fuse: 'Combined both searches',
+  aggregate: 'Grouped matches back into entries',
+  rerank: 'Removed near-duplicates',
+  verify: 'Checked every result against your stored entries',
+}
+
 /**
  * Look back — semantic search across the person's own history.
  *
@@ -161,10 +172,29 @@ export function Echo() {
                 never felt this way before" would be the app overstating itself.
               */}
               <p className="mt-2 text-sm text-text-subtle">
-                {reflection.mode === 'semantic'
-                  ? 'Matched by meaning, on this device.'
-                  : 'Matched on the words you used, not their meaning — entries that put it differently will not have surfaced.'}
+                {reflection.mode === 'hybrid'
+                  ? 'Searched two ways on this device — by the words you used and by what they mean — then checked against what you actually wrote.'
+                  : 'Searched on the words you used, not their meaning — entries that put it differently will not have surfaced.'}
               </p>
+
+              {/*
+                A search can hand back the worst night someone ever recorded.
+                That is their writing and it is not ours to hide, but it is not
+                a neutral thing to be handed either, so support comes with it.
+              */}
+              {reflection.result.resurfacedDistress ? (
+                <Card
+                  tone="raised"
+                  padding="md"
+                  className="mt-5 border-accent/50 bg-accent-soft/40"
+                >
+                  <p className="max-w-prose text-text">
+                    Some of what came back is heavy going. It is yours, so it is here — but if
+                    reading it again is hard right now, the people below are there for exactly
+                    that.
+                  </p>
+                </Card>
+              ) : null}
 
               {reflection.result.personal.length > 0 ? (
                 <div className="mt-5 space-y-4">
@@ -197,9 +227,34 @@ export function Echo() {
                 </section>
               ) : null}
 
-              {reflection.risk.level === 'concern' ? (
+              {reflection.risk.level === 'concern' || reflection.result.resurfacedDistress ? (
                 <CrisisResources className="mt-10" />
               ) : null}
+
+              {/*
+                The pipeline, in the open. Someone being shown their own history
+                by a piece of software is owed the ability to see how it decided,
+                and a search that has to publish its working is a search that
+                cannot quietly start guessing.
+              */}
+              <section aria-labelledby="how-heading" className="mt-10">
+                <h3
+                  id="how-heading"
+                  className="font-sans text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle"
+                >
+                  How this answer was put together
+                </h3>
+                <ol className="mt-3 space-y-1.5 text-sm text-text-muted">
+                  {reflection.trace.map((stage) => (
+                    <li key={stage.name} className="flex flex-wrap gap-x-2">
+                      <span className="font-medium text-text">{STAGE_LABELS[stage.name] ?? stage.name}</span>
+                      <span className="text-text-subtle">
+                        {stage.note ?? `${stage.kept} kept`}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             </div>
           ) : null}
         </div>

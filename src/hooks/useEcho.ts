@@ -1,30 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { buildCorpus } from '../lib/echo/corpus'
 import { embed, embedOne, isSupported, type EngineStatus } from '../lib/echo/embeddings'
-import { keywordRetrieve } from '../lib/echo/keyword'
 import { LIBRARY, libraryEmbeddingText } from '../lib/echo/library'
-import {
-  retrieve,
-  summarise,
-  type IndexedCard,
-  type IndexedPassage,
-  type RetrievalResult,
-} from '../lib/echo/retrieve'
-import { assessRisk, type RiskAssessment } from '../lib/echo/safety'
+import { runPipeline, type EchoAnswer, type SearchMode } from '../lib/echo/pipeline'
+import type { IndexedCard, IndexedPassage } from '../lib/echo/retrieve'
 import { useMindfulData } from './useMindfulData'
 
-/** Which engine produced an answer, so the UI can be honest about its limits. */
-export type SearchMode = 'semantic' | 'keyword'
+export type { SearchMode }
 
-export interface Reflection {
-  /** What was asked, kept so the answer can be shown against it. */
-  query: string
-  risk: RiskAssessment
-  /** Absent when the risk assessment stopped the search before it began. */
-  result: RetrievalResult | null
-  summary: string
-  mode: SearchMode
-}
+/** One run of the pipeline, kept so the answer can be shown against the question. */
+export type Reflection = EchoAnswer
 
 export interface UseEcho {
   status: EngineStatus
@@ -120,24 +105,11 @@ export function useEcho(): UseEcho {
       const trimmed = text.trim()
       if (trimmed.length === 0) return
 
-      // Before anything else, and independent of the model. See the note above.
-      const risk = assessRisk(trimmed)
-      if (risk.level === 'acute') {
-        setReflection({ query: trimmed, risk, result: null, summary: '', mode: 'keyword' })
-        return
-      }
-
-      // Without the model, answer with word overlap rather than not at all.
-      // See `keyword.ts` — this is a supported path, not a degraded one.
+      // The lexical arm alone, which needs nothing downloaded. The risk guard
+      // is the pipeline's first stage, so a disclosure typed on a device that
+      // never fetched the model gets the same response as everywhere else.
       if (status.state !== 'ready') {
-        const result = keywordRetrieve(trimmed, passages, data.moods)
-        setReflection({
-          query: trimmed,
-          risk,
-          result,
-          summary: summarise(result, data),
-          mode: 'keyword',
-        })
+        setReflection(runPipeline({ query: trimmed, passages, data }))
         return
       }
 
@@ -145,24 +117,18 @@ export function useEcho(): UseEcho {
       try {
         const index = await buildIndex()
         const queryVector = await embedOne(trimmed)
-        const result = retrieve(queryVector, index.passages, index.cards, data.moods)
-        setReflection({
-          query: trimmed,
-          risk,
-          result,
-          summary: summarise(result, data),
-          mode: 'semantic',
-        })
+        setReflection(
+          runPipeline({
+            query: trimmed,
+            passages,
+            data,
+            dense: { queryVector, passages: index.passages, cards: index.cards },
+          }),
+        )
       } catch {
-        // A mid-session failure must not lose the person's question.
-        const result = keywordRetrieve(trimmed, passages, data.moods)
-        setReflection({
-          query: trimmed,
-          risk,
-          result,
-          summary: summarise(result, data),
-          mode: 'keyword',
-        })
+        // A mid-session failure must not lose the person's question: the same
+        // pipeline runs with one arm instead of two.
+        setReflection(runPipeline({ query: trimmed, passages, data }))
       } finally {
         setThinking(false)
       }
