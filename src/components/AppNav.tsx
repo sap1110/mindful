@@ -10,6 +10,7 @@ import {
   Wind,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useIdleHide } from '../hooks/useIdleHide'
 import { cn } from '../lib/cn'
 
 const ITEMS = [
@@ -36,20 +37,39 @@ const ITEMS = [
  * The label is always visible: an icon on its own would fail both the
  * "never colour or icon alone" rule and anyone who does not recognise a
  * pictogram of wind.
+ *
+ * It fades out once the screen has been still for a few seconds and returns on
+ * any pointer movement, scroll, key or touch. With nine destinations the bar is
+ * a permanent stripe across the bottom of every screen, and the content is what
+ * people came for — but it never goes away for a keyboard user, and never fades
+ * at all under `prefers-reduced-motion`. See `useIdleHide`.
  */
 export function AppNav({ className }: { className?: string }) {
+  const { ref, visible } = useIdleHide<HTMLElement>()
+
   return (
     <nav
+      ref={ref}
       aria-label="Sections"
       className={cn(
         'fixed inset-x-0 bottom-0 z-30 pb-[env(safe-area-inset-bottom)]',
         'border-t border-border bg-surface/92 backdrop-blur-md',
         'sm:inset-x-auto sm:bottom-6 sm:left-1/2 sm:w-auto sm:-translate-x-1/2',
         'sm:rounded-pill sm:border sm:bg-surface/95 sm:shadow-lift',
+        // Fade and drop away when idle. Still focusable while hidden — focus
+        // pins it back open — so nothing becomes unreachable.
+        'transition-[opacity,transform] duration-400 ease-calm',
+        'motion-reduce:transition-none motion-reduce:opacity-100 motion-reduce:translate-y-0',
+        visible ? 'translate-y-0 opacity-100' : 'translate-y-3 opacity-0 hover:opacity-100',
         className,
       )}
     >
-      <ul className="mx-auto flex max-w-xl items-stretch justify-between px-0.5 sm:gap-1 sm:px-2">
+      {/*
+        Nine destinations. The list sizes to its content and scrolls rather
+        than clipping — an earlier `max-w-xl` cut the last items off the pill
+        once Ask and Recovery were added.
+      */}
+      <ul className="mx-auto flex max-w-full items-stretch justify-between gap-0.5 overflow-x-auto px-0.5 sm:w-auto sm:justify-center sm:gap-1 sm:overflow-visible sm:px-2">
         {ITEMS.map(({ to, label, icon: Icon }) => (
           <li key={to} className="flex-1 sm:flex-none">
             <NavLink

@@ -1,7 +1,10 @@
 import { motion } from 'framer-motion'
 import {
+  ArrowRight,
+  Brain,
   ClipboardCheck,
   History,
+  MessageCircleQuestion,
   NotebookPen,
   Settings as SettingsIcon,
   Smile,
@@ -10,11 +13,14 @@ import {
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AppNav } from '../components/AppNav'
+import { TimeMotif } from '../components/home/TimeMotif'
 import { PageShell } from '../components/PageShell'
 import { Button } from '../components/ui/Button'
 import { buttonStyles } from '../components/ui/buttonStyles'
 import { Card } from '../components/ui/Card'
 import { useProfile } from '../hooks/useProfile'
+import { cn } from '../lib/cn'
+import { timeOfDay } from '../lib/date'
 import { staggerChild, staggerParent } from '../lib/motion'
 import { copingStyle, greetingFor, reasonLabel, type CopingStyleId } from '../lib/profile'
 
@@ -34,10 +40,22 @@ const SURFACES = [
     body: 'Find the times you have written something like this before.',
   },
   {
+    to: '/ask',
+    icon: MessageCircleQuestion,
+    title: 'Ask',
+    body: 'Evidence-first answers, every claim traced to a named source.',
+  },
+  {
     to: '/journal',
     icon: NotebookPen,
     title: 'Journal',
     body: 'A prompt if you want one, a blank page if you do not.',
+  },
+  {
+    to: '/recovery',
+    icon: Brain,
+    title: 'Recovery',
+    body: 'Concussion symptom tracking and a graduated return plan.',
   },
   { to: '/breathe', icon: Wind, title: 'Breathe', body: 'Triangle, 4-7-8 or a slower, even rhythm.' },
   {
@@ -88,19 +106,28 @@ export function Home() {
       }
     >
       <motion.div variants={staggerParent} initial="hidden" animate="visible">
-        <motion.p
-          variants={staggerChild}
-          className="text-xs font-semibold uppercase tracking-[0.14em] text-primary"
-        >
-          {greeting}
-        </motion.p>
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <motion.p
+              variants={staggerChild}
+              className="text-xs font-semibold uppercase tracking-[0.14em] text-primary"
+            >
+              {greeting}
+            </motion.p>
 
-        <motion.h1
-          variants={staggerChild}
-          className="mt-3 text-display-xs text-text sm:text-display-sm"
-        >
-          Hello, {profile.name}.
-        </motion.h1>
+            <motion.h1
+              variants={staggerChild}
+              className="mt-3 text-display-xs text-text sm:text-display-sm"
+            >
+              Hello, {profile.name}.
+            </motion.h1>
+          </div>
+
+          {/* Decorative only — the greeting beside it already says the hour. */}
+          <motion.div variants={staggerChild} className="hidden shrink-0 sm:block">
+            <TimeMotif when={timeOfDay()} />
+          </motion.div>
+        </div>
 
         <motion.p variants={staggerChild} className="mt-4 max-w-prose text-lg text-text-muted">
           Nothing is due and nothing is tracked. Whenever you have a minute, start with the thing
@@ -171,13 +198,36 @@ export function Home() {
               <li key={to}>
                 <Link
                   to={to}
-                  className="flex h-full items-start gap-3.5 rounded-2xl border border-border bg-surface/70 p-5 transition-colors hover:border-primary/40 hover:bg-surface"
+                  className={cn(
+                    'group flex h-full items-start gap-3.5 rounded-2xl border border-border',
+                    'bg-surface/70 p-5 shadow-soft',
+                    'transition-[background-color,border-color,box-shadow,transform] duration-400 ease-calm',
+                    'hover:-translate-y-0.5 hover:border-primary/40 hover:bg-surface hover:shadow-lift',
+                    'motion-reduce:hover:translate-y-0',
+                  )}
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-primary">
+                  <span
+                    className={cn(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                      'bg-surface-muted text-primary transition-colors duration-400 ease-calm',
+                      'group-hover:bg-primary-soft',
+                    )}
+                  >
                     <Icon aria-hidden="true" className="h-4.5 w-4.5" />
                   </span>
-                  <span>
-                    <span className="block text-[0.9375rem] font-medium text-text">{title}</span>
+                  <span className="flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-[0.9375rem] font-medium text-text">{title}</span>
+                      <ArrowRight
+                        aria-hidden="true"
+                        className={cn(
+                          'h-3.5 w-3.5 -translate-x-1 text-primary opacity-0',
+                          'transition-[opacity,transform] duration-400 ease-calm',
+                          'group-hover:translate-x-0 group-hover:opacity-100',
+                          'motion-reduce:transition-none',
+                        )}
+                      />
+                    </span>
                     <span className="mt-0.5 block text-sm text-text-muted">{body}</span>
                   </span>
                 </Link>

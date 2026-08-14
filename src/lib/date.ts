@@ -90,3 +90,14 @@ export function formatDuration(ms: number): string {
   if (seconds === 0) return `${minutes} min`
   return `${minutes} min ${seconds} sec`
 }
+
+export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night'
+
+/** Which part of the day it is, for copy and decoration that should notice. */
+export function timeOfDay(date: Date = new Date()): TimeOfDay {
+  const hour = date.getHours()
+  if (hour < 12) return 'morning'
+  if (hour < 17) return 'afternoon'
+  if (hour < 22) return 'evening'
+  return 'night'
+}

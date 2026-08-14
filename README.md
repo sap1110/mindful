@@ -72,6 +72,17 @@ the data to go.
   **Erase** is a two-step confirmation that clears every key and re-gates the app
   without a reload.
 - **Nothing in cookies, sessionStorage or IndexedDB.** Verified by the suite.
+- **Failing does not disclose.** An error boundary catches render crashes and
+  shows a fallback with no message, no stack, no component trace and no "copy
+  error" affordance — just what broke, that the entries are still on the device
+  and were never sent anywhere, and a way out.
+- **Production builds drop every `console.*` and `debugger`,** so a stray log
+  line cannot ship. No source maps either: they would hand anyone with devtools
+  the crisis-detection patterns, which are the one part of this codebase that is
+  easier to evade if you can read it.
+- **Every citation is `https`.** MedQuAD carries some `http://` URLs from older
+  NIH pages; the corpus upgrades them, because an http link in a health app
+  leaks which condition someone just read about, in cleartext.
 
 Two test suites hold this up rather than describing it. `tests/privacy.spec.ts`
 drives a full session of real use — a mood note, a journal entry, a search, a
@@ -223,8 +234,10 @@ risk → intent → retrieve (hybrid) → rerank → compose → verify
   thunderclap headache, cauda equina, infant fever — escalate before any
   retrieval runs. Mental-health crisis routes to crisis support instead.
 - **Intent classification**: rule-first for the two intents where an error is
-  expensive (medication, diagnosis requests), BM25 over a prototype bank for
-  the rest, `unclear` as a first-class answer that becomes a question back.
+  expensive (medication, diagnosis requests), then a **trained classifier** for
+  the rest — see below. `unclear` is a first-class answer, but it no longer
+  refuses on its own: intent chooses the framing, and the *evidence* decides
+  whether there is an answer.
 - **Independent verification**: re-derives everything from scratch — is each
   claim literally present in its cited document, does the citation actually
   pertain to the question, does any sentence diagnose/dose/promise, is
@@ -255,12 +268,67 @@ a cauda-equina phrasing, intent scores diluted by query length, and generic
 words outvoting "headache" — the last fixed by moving the classifier to BM25,
 where a term is worth what it discriminates.
 
-The evidence corpus (~45 documents) carries per-document metadata — org, title,
-topic, type, URL, retrieval date — and folds in three feeds: physical-health
-guidance written for Ask (NHS, WHO, MedlinePlus), Echo's mental-health library,
-and the concussion guidance with its consensus citations. The optional 30MB
-embedding model is shared with Echo; without it the same pipeline runs
-lexical-only, which is the mode CI tests.
+### Trained classifiers
+
+Intent and risk are classified by models fitted on a labelled dataset, not by
+heuristics alone. Two heads per task, from the same data:
+
+| Head | Features | Intent macro-F1 | Risk macro-F1 |
+| ---- | -------- | --------------- | ------------- |
+| **embedding** | Sentence vectors from `Xenova/all-MiniLM-L6-v2` | **0.90** | **0.74** |
+| **lexical** | TF-IDF over unigrams and bigrams | 0.63 | 0.41 |
+
+The embedding head is ordinary transfer learning, and it is the reason the
+classifier generalises past the phrasings anyone wrote down: the pretrained
+encoder already knows "my head feels heavy" and "I have a headache" are
+neighbours, so a few hundred labelled examples only have to teach the decision
+boundary rather than the language. It reuses the query vector retrieval already
+computes, so the better classifier costs no extra model and no extra forward
+pass. Softmax regression rather than anything deeper, because it is convex (the
+committed weights are reproducible, not a lucky seed), it cannot overfit a small
+dataset the way a deeper model would, and every lexical weight belongs to one
+readable word.
+
+`npm run train` refits both heads, prints a confusion matrix and per-class
+precision/recall, and writes the artefacts. Training happens on a developer
+machine; users receive a few kilobytes of learned weights.
+
+**The dataset's limitation, stated because it is the important one:** the 355
+labelled examples are hand-authored for this project. No real user data was
+used — which is the only way to build a supervised classifier for an app that
+promises nothing leaves the device — and the cost is that the model learns one
+author's idea of how people write. The register mix (tidy prose, phone typing,
+second-language phrasing) is the mitigation, the held-out split is the
+measurement, and neither makes it go away. It is recorded in the model artefact
+itself.
+
+**Two safety asymmetries** keep the models subordinate to the rules. Diagnosis
+requests and medication questions are matched by pattern first, because a
+classifier at 0.90 is wrong one time in ten and that is not an acceptable rate
+for either. And on risk, the trained head may only ever *raise* a level, never
+lower one — and cannot reach `high` at all, since an emergency route deserves a
+pattern a person can read rather than a probability.
+
+### The evidence corpus
+
+~340 documents, each carrying org, title, topic, type, URL and retrieval date.
+Four feeds:
+
+1. **A curated slice of MedQuAD**, the US National Library of Medicine's
+   question-answering collection — real Q&A pairs from MedlinePlus, NIDDK,
+   NINDS, NHLBI and CDC pages, each keeping the URL it came from. Curated, not
+   taken whole: `npm run build:evidence` keeps the consumer-facing sources, the
+   question types Ask has a lane for, and an explicit list of common health
+   topics. Most of MedQuAD is rare disease, and shipping all 47,000 rows would
+   have diluted retrieval for the questions people actually ask.
+2. Physical-health documents written for Ask (NHS, WHO, MedlinePlus), kept
+   because they are written in the register people ask in and carry the
+   emergency thresholds a general corpus does not foreground.
+3. Echo's mental-health library.
+4. The concussion guidance and neuroscience notes.
+
+The optional 30MB embedding model is shared with Echo; without it the same
+pipeline runs lexical-only, which is the mode CI tests.
 
 ## Concussion recovery
 
@@ -372,6 +440,8 @@ To try it with data in it, open **Settings → Load sample data**.
 | `npm run build` | Type-check (`tsc -b`) and build to `dist/` |
 | `npm run lint` | ESLint over the project |
 | `npm run test` | Playwright + axe suite (starts its own dev server) |
+| `npm run train` | Refit both classifier heads and rewrite the model artefacts |
+| `npm run build:evidence` | Rebuild the MedQuAD slice of the evidence corpus |
 | `npm run verify` | `lint` + `build` + `test` — the pre-push gate |
 | `npm run preview` | Serve the production build locally |
 
@@ -496,10 +566,11 @@ npm run test
 | Suite | What it holds up |
 | ----- | ---------------- |
 | `privacy.spec.ts` | No request to any origin but this one, across a full session of real use |
-| `security.spec.ts` | The profile gate against URL manipulation, storage residue, stored XSS, referrer leakage |
+| `security.spec.ts` | The profile gate against URL manipulation, storage residue, stored XSS, referrer leakage, and that a crash leaks neither user text nor a stack trace |
 | `echo-retrieval.spec.ts` | recall@3, MRR, register parity, ranking mechanics, and every verification rule — in Node, with no model |
 | `recovery.spec.ts` | Every gate in the return protocol, including the one that refuses to clear anyone for contact |
 | `breathe.spec.ts` | What the voice says and when, and that it says nothing when switched off |
+| `guide-classifier.spec.ts` | Train/eval disjointness, published metrics, rules outranking the model, corpus id uniqueness |
 | `crisis-language.spec.ts` | 53 phrasings of crisis, concern and everyday idiom — including the euphemisms platform moderation trained people into |
 | `guide-pipeline.spec.ts` | Ask's eval gates, the verifier red-teamed with corrupted responses, injection inertness |
 | `ask.spec.ts` | The safe-response format on screen, escalation replacing education, a11y in every state |
@@ -536,6 +607,7 @@ Paraphrased rather than reproduced, cited in the app, checked 2026-08-14.
 | Concussion Alliance | Sleep, mood and recovery summaries |
 | Macnow et al., *JAMA Pediatrics* 2021 | Screen-time guidance in the first 48 hours |
 | Leddy et al. | Sub-symptom-threshold aerobic exercise |
+| MedQuAD (US National Library of Medicine) | ~290 documents of Ask's evidence corpus, from MedlinePlus / NIDDK / NINDS / NHLBI / CDC pages, each linked to its source |
 | Giza & Hovda, *Neurosurgery* 2014 | The neurometabolic cascade behind the mechanism explanations |
 | Ponsford et al., *JNNP* 2002 | The evidence that education itself reduces persisting symptoms |
 

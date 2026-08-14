@@ -2,8 +2,11 @@ import { motion } from 'framer-motion'
 import { ArrowRight, Leaf, Lock, NotebookPen, Waves } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { BreathingHalo } from '../components/BreathingHalo'
+import { MoodPreview } from '../components/landing/MoodPreview'
+import { OneBreath } from '../components/landing/OneBreath'
 import { PageShell } from '../components/PageShell'
 import { buttonStyles } from '../components/ui/buttonStyles'
+import { cn } from '../lib/cn'
 import { fadeUp, staggerChild, staggerParent } from '../lib/motion'
 import { useProfile } from '../hooks/useProfile'
 
@@ -99,8 +102,50 @@ export function Landing() {
         </div>
 
         {/* Below the pitch on small screens — the words should lead on a phone. */}
-        <motion.div variants={fadeUp}>
-          <BreathingHalo className="mx-auto max-w-[20rem] lg:max-w-none" />
+        <motion.div variants={fadeUp} className="space-y-5">
+          <BreathingHalo className="mx-auto max-w-[18rem] lg:max-w-none" />
+          <OneBreath />
+        </motion.div>
+      </motion.div>
+
+      {/*
+        The product, playable, before the pitch has finished. Someone who came
+        here unsure is better served by twelve seconds of the actual thing than
+        by another paragraph about it.
+      */}
+      <motion.div
+        variants={staggerParent}
+        initial="hidden"
+        animate="visible"
+        className="mt-16 grid gap-4 sm:mt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-5"
+      >
+        <motion.div variants={staggerChild}>
+          <MoodPreview />
+        </motion.div>
+
+        <motion.div
+          variants={staggerChild}
+          className="relative overflow-hidden rounded-3xl border border-border bg-surface/85 p-5 shadow-soft backdrop-blur sm:p-6"
+        >
+          <div
+            aria-hidden="true"
+            className="absolute -right-14 -top-14 h-44 w-44 rounded-full bg-lavender-200/45 blur-2xl"
+          />
+          <div className="relative">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-text-subtle">
+              And when you look back
+            </p>
+            <p className="mt-2 font-display text-xl text-text">
+              “You have written something like this before.”
+            </p>
+            <p className="mt-3 text-sm text-text-muted">
+              Mindful searches your own entries for the times that read like today — and shows you
+              what the fortnight after each of them actually looked like. Not advice. Your record.
+            </p>
+            <p className="mt-4 text-sm text-text-subtle">
+              It runs on your device, so your journal never has to leave it.
+            </p>
+          </div>
         </motion.div>
       </motion.div>
 
@@ -115,9 +160,20 @@ export function Landing() {
           <motion.li
             key={title}
             variants={staggerChild}
-            className="rounded-3xl border border-border bg-surface/85 p-6 shadow-soft backdrop-blur transition-shadow duration-400 ease-calm hover:shadow-lift"
+            className={cn(
+              'group rounded-3xl border border-border bg-surface/85 p-6 shadow-soft backdrop-blur',
+              'transition-[box-shadow,border-color,transform] duration-400 ease-calm',
+              'hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lift',
+              'motion-reduce:hover:translate-y-0',
+            )}
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+            <span
+              className={cn(
+                'flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-soft text-primary',
+                'transition-transform duration-400 ease-settle group-hover:scale-105',
+                'motion-reduce:group-hover:scale-100',
+              )}
+            >
               <Icon aria-hidden="true" className="h-5 w-5" />
             </span>
             <h2 className="mt-4 text-xl text-text">{title}</h2>
