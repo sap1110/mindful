@@ -10,7 +10,7 @@ import {
 import { classifyIntent, type IntentResult } from './intent'
 import { classifyGuideRisk, type GuideRisk } from './risk'
 import { compose, composeMedicationResponse, type SafeResponse } from './compose'
-import { verifyResponse, type Verdict } from './verify'
+import { CITATION_RELEVANCE_FLOOR, verifyResponse, type Verdict } from './verify'
 
 /**
  * Ask's pipeline — the PRD §6 flow, end to end, on this device.
@@ -72,10 +72,28 @@ export interface GuidePipelineInput {
   dense?: DenseGuideArm | null
 }
 
-/** Below this best-document relevance, a symptom question asks for detail instead. */
-const CLARIFY_FLOOR = 0.14
+/**
+ * Below this best-document relevance, a symptom question asks for detail.
+ *
+ * Was 0.14 against a twelve-document corpus, where almost nothing cleared it
+ * and every real question came back as "a little more detail first" — the bug
+ * that made the feature feel broken. With the MedQuAD corpus behind it there is
+ * usually something genuinely relevant, so the floor now does its actual job:
+ * catching questions with no coverage at all, rather than most of them.
+ */
+const CLARIFY_FLOOR = 0.06
 /** How many documents an answer may cite. */
 const MAX_SOURCES = 3
+
+/**
+ * Content words a question needs before an unlabelled one is worth answering.
+ *
+ * "is this bad" is three words and one of them survives stopword removal. No
+ * amount of evidence makes that answerable, and answering it anyway — which a
+ * 300-document corpus will always let you do — is how a careful system starts
+ * sounding like a search engine.
+ */
+const MIN_ANSWERABLE_WORDS = 4
 
 const CLARIFYING_QUESTIONS = [
   'What is the main thing you are feeling or asking about, in a sentence?',
@@ -89,7 +107,7 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
 
   /* 1-2. guard + risk ------------------------------------------------------ */
 
-  const risk = classifyGuideRisk(trimmed)
+  const risk = classifyGuideRisk(trimmed, dense?.queryVector)
   trace.push({ name: 'risk', note: `${risk.level}${risk.matched ? ` (${risk.matched})` : ''}` })
 
   if (risk.crisis) {
@@ -104,10 +122,13 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
 
   /* 3. intent --------------------------------------------------------------- */
 
-  const intent = classifyIntent(trimmed)
+  const intent = classifyIntent(trimmed, dense?.queryVector)
   trace.push({
     name: 'intent',
-    note: `${intent.intent}${intent.rule ? ` (rule: ${intent.rule})` : ''}`,
+    note: intent.rule
+      ? `${intent.intent} (rule: ${intent.rule})`
+      : `${intent.intent} — trained ${intent.features ?? 'lexical'} classifier, ` +
+        `confidence ${intent.confidence.toFixed(2)}`,
   })
 
   if (intent.intent === 'out-of-scope') {
@@ -126,8 +147,23 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
     return finish(trimmed, 'answer', intent, risk, response, verdict, [], 0.9, trace)
   }
 
-  if (intent.intent === 'unclear' || risk.level === 'unknown') {
-    trace.push({ name: 'route', note: 'not enough to answer safely — asking instead' })
+  /*
+   * An unclear intent is no longer a refusal on its own — intent picks the
+   * framing, and the evidence decides whether there is an answer. But "is this
+   * bad" and "it hurts" are genuinely unanswerable, and a corpus this large
+   * will always find *something* for any three words, so vagueness is measured
+   * on the question rather than inferred from a failed classification.
+   */
+  const contentWords = tokenize(trimmed).size
+  const tooVague =
+    risk.level === 'unknown' ||
+    (intent.intent === 'unclear' && contentWords < MIN_ANSWERABLE_WORDS)
+
+  if (tooVague) {
+    trace.push({
+      name: 'route',
+      note: `too little to go on (${contentWords} content words) — asking instead`,
+    })
     return finish(trimmed, 'clarify', intent, risk, null, null, [...CLARIFYING_QUESTIONS], intent.confidence, trace)
   }
 
@@ -176,19 +212,29 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
     },
   )
 
+  /*
+   * Order comes from fusion and re-ranking; `relevance` is only a coverage
+   * score for the confidence floor.
+   *
+   * These were conflated once, by re-sorting the fused list on word overlap —
+   * which quietly undid BM25. "I keep getting headaches after long days at
+   * work" put a dizziness document first, because it shared "long", "days",
+   * "work" and "help" with the question while the headache document shared
+   * only "headache": four common words beating one rare one is the exact
+   * failure IDF exists to prevent.
+   */
   const selected = reranked
     .map(({ item }) => ({ doc: item, relevance: relevanceOf(item) }))
-    .filter((entry) => entry.relevance > 0)
-    .sort((a, b) => b.relevance - a.relevance)
+    .filter((entry) => entry.relevance >= CITATION_RELEVANCE_FLOOR)
 
-  const topRelevance = selected[0]?.relevance ?? 0
+  const topRelevance = selected.reduce((best, entry) => Math.max(best, entry.relevance), 0)
   trace.push({
     name: 'retrieve',
     note: `${selected.length} of ${EVIDENCE_CORPUS.length} documents selected, ${dense ? 'hybrid' : 'by words'}, best ${topRelevance.toFixed(2)}`,
   })
 
-  if (intent.intent === 'symptom' && topRelevance < CLARIFY_FLOOR) {
-    trace.push({ name: 'route', note: 'evidence too weak for a symptom question — asking instead' })
+  if (selected.length === 0 || topRelevance < CLARIFY_FLOOR) {
+    trace.push({ name: 'route', note: 'nothing in the evidence base covers this — asking instead' })
     return finish(trimmed, 'clarify', intent, risk, null, null, [...CLARIFYING_QUESTIONS], topRelevance, trace)
   }
 
@@ -211,6 +257,14 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
     trace.push({ name: 'route', note: 'verification failed twice — minimal safe answer' })
     const fallback = compose({ intent: intent.intent, risk: risk.level, selected: [] })
     return finish(trimmed, 'fallback', intent, risk, fallback, verdict, [], 0.2, trace)
+  }
+
+  // A verified answer that ended up citing nothing is not an answer. This
+  // cannot normally happen now that strict mode keeps its best document, and
+  // it is caught here rather than trusted not to.
+  if (response.sources.length === 0) {
+    trace.push({ name: 'route', note: 'no citation survived — asking instead of answering emptily' })
+    return finish(trimmed, 'clarify', intent, risk, null, verdict, [...CLARIFYING_QUESTIONS], topRelevance, trace)
   }
 
   const confidence = Math.min(

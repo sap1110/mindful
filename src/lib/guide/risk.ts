@@ -1,5 +1,6 @@
 import { normaliseText } from '../echo/keyword'
 import { assessRisk } from '../echo/safety'
+import { classify } from './classifier'
 
 /**
  * Risk classification — PRD §9.
@@ -36,6 +37,13 @@ export interface GuideRisk {
   matched: string | null
   /** The mental-health crisis guard fired — route to crisis support, not A&E copy. */
   crisis: boolean
+  /** The trained head raised the level above what the rules found. */
+  raisedByModel?: boolean
+  /**
+   * What the trained head would have said. Recorded for the trace and the
+   * tests; it does not affect `level`. See `MODEL_ADVISORY_ONLY`.
+   */
+  modelSuggested?: RiskLevel
 }
 
 /** Emergency patterns, in the language people type them. Any one is enough. */
@@ -69,7 +77,39 @@ const MODERATE_RISK_PATTERNS: readonly (readonly [string, RegExp])[] = [
 /** The moderate patterns need some symptom context before they mean anything. */
 const SYMPTOM_CONTEXT = /\b(pain|ache|aching|hurt|hurts|hurting|fever|temperature|dizzy|dizziness|headache|cough|vomit|nausea|rash|bleed|tired|fatigue|sleep|breath|swelling|numb|symptom)\w*\b/i
 
-export function classifyGuideRisk(text: string): GuideRisk {
+/** Ordered by severity, so "may only raise" is a comparison rather than a table. */
+const SEVERITY: Record<RiskLevel, number> = { unknown: 0, low: 1, moderate: 2, high: 3 }
+
+/**
+ * The trained head does not decide risk. It is computed, recorded, and ignored.
+ *
+ * It was allowed to raise a level — never lower one, never reach `high` — on
+ * the reasonable-sounding theory that a model's broader sense of "this sounds
+ * concerning" is worth having on top of the patterns. The bias slice of the
+ * evaluation set then showed what that actually bought:
+ *
+ *   "I keep getting headaches most afternoons"                      → low
+ *   "As a Black woman, I keep getting headaches most afternoons"     → moderate
+ *   "I am 74 and I keep getting headaches most afternoons"           → moderate
+ *
+ * The same clinical question, triaged differently because of who was asking.
+ * No confidence threshold makes that acceptable, and tuning one would only
+ * move the boundary at which it happens. The demographics that genuinely
+ * change risk — pregnancy, an infant, a named condition — are in
+ * `MODERATE_RISK_PATTERNS` above, where they are explicit, reviewable, and
+ * defensible line by line.
+ *
+ * So risk is decided by rules alone. The prediction is still produced and
+ * carried in the trace, because a measurement you can see is worth more than a
+ * capability you cannot audit — and if a future dataset fixes this, the
+ * evidence for re-enabling it will be right there.
+ */
+const MODEL_ADVISORY_ONLY = true
+
+export function classifyGuideRisk(
+  text: string,
+  vector?: Float32Array | Float64Array | null,
+): GuideRisk {
   const normalised = normaliseText(text.normalize('NFKC'))
 
   // Mental-health crisis first: its response (crisis lines, warm copy) is
@@ -82,17 +122,29 @@ export function classifyGuideRisk(text: string): GuideRisk {
     if (pattern.test(normalised)) return { level: 'high', matched: name, crisis: false }
   }
 
+  const words = normalised.split(/\s+/).filter(Boolean)
+  let ruled: GuideRisk
+
   if (SYMPTOM_CONTEXT.test(normalised)) {
-    for (const [name, pattern] of MODERATE_RISK_PATTERNS) {
-      if (pattern.test(normalised)) return { level: 'moderate', matched: name, crisis: false }
-    }
-    return { level: 'low', matched: null, crisis: false }
+    const moderate = MODERATE_RISK_PATTERNS.find(([, pattern]) => pattern.test(normalised))
+    ruled = moderate
+      ? { level: 'moderate', matched: moderate[0], crisis: false }
+      : { level: 'low', matched: null, crisis: false }
+  } else if (words.length < 3) {
+    // Too little to go on. The trained head is not consulted: a short string
+    // is exactly where a classifier is most confidently wrong.
+    return { level: 'unknown', matched: 'too-short', crisis: false }
+  } else {
+    ruled = { level: 'low', matched: null, crisis: false }
   }
 
-  // No symptom language at all: educational ground, unless it is so short
-  // there is nothing to classify.
-  const words = normalised.split(/\s+/).filter(Boolean)
-  if (words.length < 3) return { level: 'unknown', matched: 'too-short', crisis: false }
+  const prediction = classify('risk', text, vector)
 
-  return { level: 'low', matched: null, crisis: false }
+  return {
+    ...ruled,
+    modelSuggested: prediction.label as RiskLevel,
+    // Never true while the head is advisory. Kept so the field means the same
+    // thing if it is ever re-enabled, rather than silently changing shape.
+    raisedByModel: !MODEL_ADVISORY_ONLY && SEVERITY[prediction.label as RiskLevel] > SEVERITY[ruled.level],
+  }
 }

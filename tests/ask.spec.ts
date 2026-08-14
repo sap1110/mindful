@@ -30,11 +30,18 @@ test.describe('ask', () => {
     await expect(page.getByRole('heading', { name: 'What to do next' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'When to seek professional help' })).toBeVisible()
 
-    // A real citation: named org, real link, retrieval date.
-    const sourceLink = page.getByRole('link', { name: /NHS — Headaches/ }).first()
+    // A real citation: a named health body, a live link, a retrieval date.
+    // Deliberately not pinned to one document — the corpus spans NHS, CDC,
+    // MedlinePlus, NINDS and NHLBI, and which of them answers a headache
+    // question best is retrieval's business, not this test's.
+    const evidence = page.getByRole('region', { name: 'What the evidence says' })
+    const sourceLink = evidence.getByRole('link').first()
     await expect(sourceLink).toBeVisible()
-    await expect(sourceLink).toHaveAttribute('href', /nhs\.uk/)
-    await expect(page.getByText(/checked 2026-08-14/).first()).toBeVisible()
+    await expect(sourceLink).toHaveAttribute('href', /^https:\/\//)
+    await expect(sourceLink).toHaveText(
+      /NHS|CDC|MedlinePlus|NINDS|NHLBI|NIDDK|World Health Organization|NIH/,
+    )
+    await expect(evidence.getByText(/checked \d{4}-\d{2}-\d{2}/).first()).toBeVisible()
 
     // Uncertainty is stated, not implied.
     await expect(page.getByText(/not an assessment of you/).first()).toBeVisible()

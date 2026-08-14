@@ -48,19 +48,53 @@ export interface Verdict {
   issues: string[]
 }
 
-/** A cited document must clear this against the question to count as support. */
-const CITATION_RELEVANCE_FLOOR = 0.12
+/**
+ * A cited document must clear this against the question to count as support.
+ *
+ * Exported because the composer has to obey the same number. They disagreed
+ * once: diversity re-ranking would add a third document that was genuinely
+ * unlike the first two and genuinely unlike the question, the verifier would
+ * correctly reject the citation, and a perfectly good answer fell all the way
+ * through to the minimal fallback because of its least useful sentence.
+ */
+export const CITATION_RELEVANCE_FLOOR = 0.12
 
 /**
  * Language no response may contain, whatever wrote it. Deliberately blunt:
  * these patterns cost false positives in exchange for making "the app
  * diagnosed me" and "the app dosed me" structurally unreachable.
  */
-const SCOPE_PATTERNS: readonly (readonly [string, RegExp])[] = [
-  ['diagnosis-assertion', /\byou\s+(clearly\s+|probably\s+|definitely\s+)?(have|are\s+suffering\s+from)\s+(?!to\b|a\s+few|questions)/i],
+/**
+ * Checked on every sentence, quoted or not. Dosage advice reaching a person is
+ * dosage advice however it got there, and a cure promise is a cure promise.
+ */
+const UNIVERSAL_SCOPE_PATTERNS: readonly (readonly [string, RegExp])[] = [
   ['dosage', /\b\d+\s?(mg|ml|mcg|milligrams?|millilitres?)\b|\btake\s+\d+\s+(tablets?|pills?|capsules?)\b/i],
   ['promise', /\b(will\s+cure|guaranteed\s+to|will\s+definitely\s+(fix|heal|cure))\b/i],
-  ['replace-care', /\b(no\s+need\s+(to\s+)?(see|visit)\s+a\s+(doctor|gp|clinician)|instead\s+of\s+medical\s+(care|advice))\b/i],
+]
+
+/**
+ * Checked only on the sentences Mindful wrote itself.
+ *
+ * These catch the app overstepping, and quoted evidence cannot overstep on its
+ * behalf: when MedlinePlus writes "this is not a sign that you have done
+ * something wrong", the phrase "you have" is not a diagnosis — but the first
+ * version of this check read it as one and dropped a good answer to the
+ * fallback. Verbatim text from an allowlisted public-health source is already
+ * constrained by being verbatim from an allowlisted public-health source.
+ */
+const AUTHORED_SCOPE_PATTERNS: readonly (readonly [string, RegExp])[] = [
+  [
+    'diagnosis-assertion',
+    // "you have" followed by an article or possessive is the diagnosing shape
+    // ("you have a concussion", "you have chronic migraine"); "you have done",
+    // "you have been", "you have to" are ordinary English.
+    /\byou\s+(clearly\s+|probably\s+|definitely\s+)?(have|are\s+suffering\s+from)\s+(a|an|the|your|chronic|acute)?\s*(?!to\b|been\b|done\b|had\b|got\b|any\b|no\b|not\b|nothing\b|questions\b|a\s+few\b)[a-z]/i,
+  ],
+  [
+    'replace-care',
+    /\b(no\s+need\s+(to\s+)?(see|visit)\s+a\s+(doctor|gp|clinician)|instead\s+of\s+medical\s+(care|advice))\b/i,
+  ],
 ]
 
 /** Whitespace differs; nothing else may. Same rule as Echo's verifier. */
@@ -105,8 +139,9 @@ export function verifyResponse(query: string, response: SafeResponse): Verdict {
   const citationAccuracy =
     evidenceClaims.length === 0 ? 1 : relevantCitations / evidenceClaims.length
 
-  // Scope: every sentence, framing included.
-  const allText = [
+  // Scope, in two passes: everything gets the universal checks, and only the
+  // app's own sentences get the ones about overstepping.
+  const everything = [
     ...response.directAnswer.map((claim) => claim.text),
     ...response.evidenceSays.map((claim) => claim.text),
     ...response.uncertainties,
@@ -114,13 +149,21 @@ export function verifyResponse(query: string, response: SafeResponse): Verdict {
     ...response.seekHelp,
   ].join('\n')
 
+  const authored = [
+    ...response.directAnswer.filter((claim) => claim.kind === 'framing').map((claim) => claim.text),
+    ...response.uncertainties,
+    ...response.nextSteps.map((step) => step.text),
+    ...response.seekHelp,
+  ].join('\n')
+
   const scopeViolations: string[] = []
-  for (const [name, pattern] of SCOPE_PATTERNS) {
-    if (pattern.test(allText)) {
-      scopeViolations.push(name)
-      issues.push(`scope violation: ${name}`)
-    }
+  for (const [name, pattern] of UNIVERSAL_SCOPE_PATTERNS) {
+    if (pattern.test(everything)) scopeViolations.push(name)
   }
+  for (const [name, pattern] of AUTHORED_SCOPE_PATTERNS) {
+    if (pattern.test(authored)) scopeViolations.push(name)
+  }
+  for (const name of scopeViolations) issues.push(`scope violation: ${name}`)
 
   const uncertaintyStated = response.uncertainties.length > 0
   if (!uncertaintyStated) issues.push('no uncertainty stated')

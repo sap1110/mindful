@@ -57,8 +57,18 @@ export interface ComposeInput {
   strict?: boolean
 }
 
-/** In strict mode, a citation below this relevance is dropped, not defended. */
-const STRICT_RELEVANCE = 0.3
+/**
+ * In strict mode, weaker citations are dropped rather than defended — but the
+ * best one always survives.
+ *
+ * The first version dropped everything below a fixed 0.3, which on a real
+ * question scoring 0.29 produced an "answer" citing nothing at all: technically
+ * verified, completely useless. Strict mode is meant to tighten a response, not
+ * hollow it out. If the best evidence is genuinely too weak, that is the
+ * pipeline's job to notice — and it does, by routing to a clarifying question
+ * instead of composing at all.
+ */
+const STRICT_RELEVANCE = 0.2
 
 /* ------------------------------------------------------------- templates */
 
@@ -118,8 +128,13 @@ export function firstSentence(text: string): string {
 /* --------------------------------------------------------------- compose */
 
 export function compose({ intent, risk, selected, strict = false }: ComposeInput): SafeResponse {
+  const strictlyUsable = selected.filter((entry) => entry.relevance >= STRICT_RELEVANCE)
   const usable = strict
-    ? selected.filter((entry) => entry.relevance >= STRICT_RELEVANCE)
+    ? // Never fewer than the single best document: an answer citing nothing is
+      // not a safer answer, it is an empty one.
+      strictlyUsable.length > 0
+      ? strictlyUsable
+      : selected.slice(0, 1)
     : [...selected]
 
   const top = usable[0]

@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "verify": "npm run lint && npm run build && npm run test",
-    "test": "playwright test"
+    "test": "playwright test",
+    "train": "tsx src/lib/guide/training/train.ts",
+    "build:evidence": "node scripts/build-evidence.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
@@ -37,6 +39,7 @@
     "playwright": "^1.62.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.12",
     "typescript": "~5.6.3",
     "typescript-eslint": "^8.18.2",
     "vite": "^6.0.7"

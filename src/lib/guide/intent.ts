@@ -1,11 +1,5 @@
-import {
-  bm25Ranking,
-  buildLexicalIndex,
-  normaliseText,
-  tokenList,
-  tokenize,
-  type LexicalIndex,
-} from '../echo/keyword'
+import { normaliseText, tokenize } from '../echo/keyword'
+import { classify } from './classifier'
 
 /**
  * Health intent classification — PRD §8.
@@ -40,10 +34,14 @@ export type HealthIntent =
 
 export interface IntentResult {
   intent: HealthIntent
-  /** 0-1: how much better the winner scored than "no idea". */
+  /** Softmax probability of the winning class, or 1 when a rule decided. */
   confidence: number
-  /** Which rule fired, when one did. Null for similarity classifications. */
+  /** Which rule fired, when one did. Null for a trained classification. */
   rule: string | null
+  /** Which head answered — absent when a rule decided it. */
+  features?: 'embedding' | 'lexical'
+  /** Terms that drove a lexical classification, for the trace. */
+  evidence?: string[]
 }
 
 /**
@@ -68,105 +66,29 @@ const MEDICATION_PATTERNS: readonly (readonly [string, RegExp])[] = [
 ]
 
 /**
- * Prototype phrasings per intent. These are the classifier: a query is scored
- * by lexical overlap against each bank, and the best bank wins if it wins
- * clearly. Kept in everyday register for the same reason the evidence cues
- * are — this is the language the classifier will actually meet.
+ * Confidence floors for the trained head.
+ *
+ * The embedding head is materially better (held-out macro-F1 0.90 against
+ * 0.63), so the lexical path is held to a higher bar before it is allowed to
+ * commit to a class — a weaker classifier should ask more often, not guess
+ * more often. Below the floor the answer is `unclear`, which the pipeline
+ * turns into a clarifying question.
  */
-const PROTOTYPES: Readonly<Record<Exclude<HealthIntent, 'medication' | 'out-of-scope' | 'unclear'>, readonly string[]>> = {
-  symptom: [
-    'I have a headache and feel sick',
-    'my back hurts when I bend over',
-    'I keep feeling dizzy when I stand up',
-    'I have had a fever for two days',
-    'my throat is sore and I am coughing',
-    'why does my head hurt',
-    'I feel tired all the time lately',
-    'I have not been sleeping well and feel exhausted during the day',
-    'my stomach has been hurting since yesterday',
-  ],
-  'general-health': [
-    'how much water should I drink a day',
-    'what is a normal temperature',
-    'how many hours of sleep do adults need',
-    'is coffee bad for you',
-    'what counts as a fever',
-    'how long does a cold usually last',
-  ],
-  recovery: [
-    'how do I recover from a concussion',
-    'getting back to sport after a head injury',
-    'how long until I can go back to work after being ill',
-    'returning to school after concussion',
-    'when can I exercise again after being sick',
-  ],
-  'mental-health': [
-    'I have been feeling anxious all week',
-    'I think I might be depressed',
-    'how do I deal with stress',
-    'my mind will not stop racing',
-    'I feel overwhelmed and low',
-    'how can I calm down when panicking',
-  ],
-  preventive: [
-    'how much exercise should I be doing',
-    'how do I improve my sleep routine',
-    'what can I do to stay healthy',
-    'tips for building better habits',
-    'how do I prevent getting headaches',
-  ],
-  'diagnosis-explanation': [
-    'what does a concussion actually mean',
-    'my doctor said I have migraine what is that',
-    'I was diagnosed with anxiety what does it mean',
-    'can you explain what a diagnosis of insomnia means',
-    'what happens in the brain during a concussion',
-  ],
-}
-
-/**
- * BM25 over the prototype bank, built once. IDF is the point: an early version
- * scored prototypes by plain token overlap, and the evaluation set caught it
- * classifying "headaches after long days at work" as *recovery* — because
- * "long", "after" and "work" counted as much as "headache". Under BM25 a term
- * is worth what it discriminates, which is what a classifier's features are
- * supposed to be.
- */
-let prototypeIndex: LexicalIndex | null = null
-
-function getPrototypeIndex(): LexicalIndex {
-  if (!prototypeIndex) {
-    prototypeIndex = buildLexicalIndex(
-      (Object.entries(PROTOTYPES) as [HealthIntent, readonly string[]][]).flatMap(
-        ([intent, examples]) => examples.map((text, index) => ({ id: `${intent}#${index}`, text })),
-      ),
-    )
-  }
-  return prototypeIndex
-}
-
-/** A winner below this BM25 score has matched nothing but common words. */
-const MIN_SCORE = 1.2
-/** The winner must beat the best *differently-routed* intent by this ratio. */
-const MIN_MARGIN_RATIO = 1.2
+const MIN_CONFIDENCE = { embedding: 0.34, lexical: 0.42 } as const
 
 /** Fewer content words than this and there is nothing to classify — ask instead. */
-const MIN_QUERY_TOKENS = 3
+const MIN_QUERY_TOKENS = 2
 
-/**
- * Intents whose downstream handling differs. A margin collision between two
- * intents in the same class ("preventive vs recovery") changes nothing but a
- * template, so it is resolved in favour of the best score; a collision across
- * classes ("symptom vs preventive") changes the routing, so it stays honest
- * and resolves to `unclear`.
- */
-function routingClass(intent: HealthIntent): 'symptom' | 'informational' {
-  return intent === 'symptom' ? 'symptom' : 'informational'
-}
-
-export function classifyIntent(text: string): IntentResult {
+export function classifyIntent(
+  text: string,
+  vector?: Float32Array | Float64Array | null,
+): IntentResult {
   const normalised = normaliseText(text.normalize('NFKC'))
 
+  // Rules first, and they win. These are the two lanes where a probabilistic
+  // answer is not good enough: naming someone's condition, and anything about
+  // doses. A classifier at 0.90 is wrong one time in ten, and one time in ten
+  // is not an acceptable rate for either of them.
   for (const [rule, pattern] of OUT_OF_SCOPE_PATTERNS) {
     if (pattern.test(normalised)) return { intent: 'out-of-scope', confidence: 1, rule }
   }
@@ -175,37 +97,29 @@ export function classifyIntent(text: string): IntentResult {
     if (pattern.test(normalised)) return { intent: 'medication', confidence: 1, rule }
   }
 
-  // "it hurts" carries one content word. Any classification of it would be a
-  // guess wearing a label, so it goes to clarification instead.
+  // A single content word carries nothing to classify.
   if (tokenize(text).size < MIN_QUERY_TOKENS) {
     return { intent: 'unclear', confidence: 0, rule: 'too-short' }
   }
 
-  const ranking = bm25Ranking(getPrototypeIndex(), tokenList(text))
+  const prediction = classify('intent', text, vector)
+  const floor = MIN_CONFIDENCE[prediction.features]
 
-  // Best prototype per intent, best first across intents.
-  const bestPerIntent = new Map<HealthIntent, number>()
-  for (const entry of ranking) {
-    const intent = entry.id.split('#')[0] as HealthIntent
-    if (!bestPerIntent.has(intent)) bestPerIntent.set(intent, entry.score)
+  if (prediction.confidence < floor) {
+    return {
+      intent: 'unclear',
+      confidence: prediction.confidence,
+      rule: null,
+      features: prediction.features,
+    }
   }
 
-  const scores = [...bestPerIntent.entries()]
-    .map(([intent, score]) => ({ intent, score }))
-    .sort((a, b) => b.score - a.score)
-
-  const best = scores[0]
-  if (!best || best.score < MIN_SCORE) {
-    return { intent: 'unclear', confidence: best?.score ?? 0, rule: null }
+  return {
+    intent: prediction.label as HealthIntent,
+    confidence: prediction.confidence,
+    rule: null,
+    features: prediction.features,
+    /** The words that drove it, when the lexical head answered. */
+    evidence: prediction.topFeatures.map((entry) => entry.term),
   }
-
-  const rival = scores.find(
-    (entry) => routingClass(entry.intent) !== routingClass(best.intent),
-  )
-  if (rival && best.score < rival.score * MIN_MARGIN_RATIO) {
-    return { intent: 'unclear', confidence: best.score, rule: 'route-ambiguous' }
-  }
-
-  // Squash an unbounded BM25 score into 0-1 for the confidence meter.
-  return { intent: best.intent, confidence: best.score / (best.score + 2), rule: null }
 }

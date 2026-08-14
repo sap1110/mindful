@@ -1,6 +1,7 @@
 import { GUIDANCE as CONCUSSION_GUIDANCE, EVIDENCE_SOURCES } from '../concussion/evidence'
 import { NEUROSCIENCE_NOTES } from '../concussion/neuroscience'
 import { LIBRARY, LIBRARY_SOURCES } from '../echo/library'
+import medquad from './models/medquad-evidence'
 
 /**
  * The evidence base behind Ask — the guide's only source of factual claims.
@@ -18,12 +19,22 @@ import { LIBRARY, LIBRARY_SOURCES } from '../echo/library'
  * where the evidence is hedged, "may help" never "will fix", nothing about
  * doses, and nothing a source did not actually say.
  *
- * Three feeds, one corpus:
- *   1. Documents written for Ask itself — the common physical-health questions
+ * Four feeds, one corpus:
+ *   1. A curated slice of **MedQuAD**, the US National Library of Medicine's
+ *      question-answering collection — real question-and-answer pairs from
+ *      MedlinePlus, NIDDK, NINDS, NHLBI and CDC pages, each keeping the URL it
+ *      came from. This is the bulk of the coverage and the reason Ask can
+ *      answer a question about a topic nobody hand-wrote a document for. It is
+ *      curated rather than taken whole: see `scripts/build-evidence.mjs` for
+ *      which sources, question types and topics are kept, and why shipping all
+ *      47,000 rows would have made retrieval worse rather than better.
+ *   2. Documents written for Ask itself — the common physical-health questions
  *      (headache, fever, sleep, colds, hydration, activity, back pain), each
- *      distilled from NHS / CDC / WHO / MedlinePlus public guidance.
- *   2. Echo's mental-health library, adapted — same bodies, same rules.
- *   3. The concussion guidance and neuroscience notes, adapted — already cited
+ *      distilled from NHS / CDC / WHO / MedlinePlus public guidance. These stay
+ *      because they are written in the register people ask in, and they carry
+ *      the emergency thresholds that a general corpus does not foreground.
+ *   3. Echo's mental-health library, adapted — same bodies, same rules.
+ *   4. The concussion guidance and neuroscience notes, adapted — already cited
  *      to the consensus statements and primary literature.
  *
  * Frozen at build time, retrieved 2026-08-14. No runtime fetch, ever: a live
@@ -324,11 +335,22 @@ const NEUROSCIENCE: readonly EvidenceDoc[] = NEUROSCIENCE_NOTES.map((note) => {
   }
 })
 
+/**
+ * The MedQuAD slice, built by `npm run build:evidence` and committed.
+ *
+ * Ordered *after* the hand-written documents so that when relevance ties, the
+ * document written in the register someone actually asked in wins. Everything
+ * downstream treats them identically — same verification, same citation
+ * requirements, same floors.
+ */
+const MEDQUAD: readonly EvidenceDoc[] = medquad as unknown as EvidenceDoc[]
+
 export const EVIDENCE_CORPUS: readonly EvidenceDoc[] = [
   ...PHYSICAL_HEALTH,
   ...MENTAL_HEALTH,
   ...CONCUSSION,
   ...NEUROSCIENCE,
+  ...MEDQUAD,
 ]
 
 /** The text a retriever sees: body plus the everyday phrasings. */
