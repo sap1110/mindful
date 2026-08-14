@@ -158,11 +158,10 @@ export function Landing() {
         product rather than before it: the argument only lands once someone
         knows what the thing is.
 
-        Everything in this section is live. The pipeline runs, the verifier
-        rejects, the browser refuses the request, the evaluation suite executes.
-        A page that made these claims in prose would be indistinguishable from
-        every other health app that makes them, which is exactly the problem it
-        exists to solve.
+        Everything in this section is live. The pipeline answers, the verifier
+        rejects, the browser refuses the request. A page that made these claims
+        in prose would be indistinguishable from every other health app that
+        makes them, which is exactly the problem it exists to solve.
       */}
       <motion.section
         variants={staggerParent}
