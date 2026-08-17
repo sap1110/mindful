@@ -40,6 +40,8 @@ export const STORAGE_KEYS = {
   concussion: 'mindful.v1.concussion.checks',
   /** Where someone is on the graduated return-to-learn/sport ladder. */
   concussionProtocol: 'mindful.v1.concussion.protocol',
+  /** The guided tour has been offered on this device — see `readTourSeen`. */
+  tourSeen: 'mindful.v1.tour.seen',
 } as const
 
 /* ----------------------------------------------------------------- types */
@@ -705,6 +707,29 @@ export function saveProtocol(state: StoredProtocol): void {
 
 export function clearProtocol(): void {
   removeRaw(STORAGE_KEYS.concussionProtocol)
+  emit()
+}
+
+/* ------------------------------------------------------------- tour flag */
+
+/**
+ * Has the guided tour already been offered on this device?
+ *
+ * One boolean, and it records that the offer was *made* rather than that the
+ * tour was finished. Someone who declined it has answered the question, and
+ * asking again every time they open the app would be nagging — the tour stays
+ * permanently reachable from the section bar and from their space, which is
+ * where a second look belongs.
+ *
+ * It sits under the same namespace as everything else, so "erase everything"
+ * takes it too and a wiped device is genuinely a fresh one.
+ */
+export function readTourSeen(): boolean {
+  return readRaw(STORAGE_KEYS.tourSeen) === 'true'
+}
+
+export function markTourSeen(): void {
+  writeRaw(STORAGE_KEYS.tourSeen, 'true')
   emit()
 }
 
