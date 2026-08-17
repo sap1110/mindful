@@ -99,6 +99,24 @@ export function Landing() {
           <motion.p variants={staggerChild} className="mt-5 text-sm text-text-subtle">
             Takes about a minute. No account, no email, nothing to cancel.
           </motion.p>
+
+          {/*
+            For the visitor who is not ready to be asked their name. The tour
+            is ungated and everything in it works, so this is a real way to
+            see the app rather than a longer pitch — but it stays a quiet
+            line, not a third button, because the two above are the ones most
+            people want.
+          */}
+          <motion.p variants={staggerChild} className="mt-3 text-sm text-text-muted">
+            Not sure yet?{' '}
+            <Link
+              to="/tour"
+              className="rounded-xs font-medium text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary"
+            >
+              Have a look around first
+            </Link>{' '}
+            — nothing to sign up for.
+          </motion.p>
         </div>
 
         {/* Below the pitch on small screens — the words should lead on a phone. */}

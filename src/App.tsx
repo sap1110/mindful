@@ -13,6 +13,7 @@ import { Ask } from './routes/Ask'
 import { Recovery } from './routes/Recovery'
 import { SelfCheck } from './routes/SelfCheck'
 import { Settings } from './routes/Settings'
+import { Tour } from './routes/Tour'
 
 /** The signed-in screens, all behind the same on-device profile gate. */
 const GUARDED = [
@@ -31,6 +32,7 @@ const GUARDED = [
  * Routes.
  *
  *   /            landing — always reachable, it is the front door
+ *   /tour        the guided walkthrough, ungated so it can be seen first
  *   /onboarding  the three-step flow (redirects to /home once a profile exists)
  *   /home        your space
  *   /mood        the daily check-in and its history
@@ -51,6 +53,12 @@ function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/" element={<Landing />} />
+        {/*
+          Ungated on purpose. The tour exists to help someone decide whether
+          to use Mindful, and putting it behind the profile gate would ask
+          them to commit before they can look.
+        */}
+        <Route path="/tour" element={<Tour />} />
         <Route path="/onboarding" element={<Onboarding />} />
         {GUARDED.map(({ path, element }) => (
           <Route key={path} path={path} element={<RequireProfile>{element}</RequireProfile>} />

@@ -1,5 +1,6 @@
 import {
   Brain,
+  Compass,
   MessageCircleQuestion,
   ClipboardCheck,
   History,
@@ -22,6 +23,7 @@ const ITEMS = [
   { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/breathe', label: 'Breathe', icon: Wind },
   { to: '/recovery', label: 'Recovery', icon: Brain },
+  { to: '/tour', label: 'Tour', icon: Compass },
   { to: '/settings', label: 'Settings', icon: Settings },
 ] as const
 
@@ -39,7 +41,7 @@ const ITEMS = [
  * pictogram of wind.
  *
  * It fades out once the screen has been still for a few seconds and returns on
- * any pointer movement, scroll, key or touch. With nine destinations the bar is
+ * any pointer movement, scroll, key or touch. With ten destinations the bar is
  * a permanent stripe across the bottom of every screen, and the content is what
  * people came for — but it never goes away for a keyboard user, and never fades
  * at all under `prefers-reduced-motion`. See `useIdleHide`.
@@ -65,7 +67,7 @@ export function AppNav({ className }: { className?: string }) {
       )}
     >
       {/*
-        Nine destinations. The list sizes to its content and scrolls rather
+        Ten destinations. The list sizes to its content and scrolls rather
         than clipping — an earlier `max-w-xl` cut the last items off the pill
         once Ask and Recovery were added.
       */}
@@ -76,7 +78,7 @@ export function AppNav({ className }: { className?: string }) {
               to={to}
               className={({ isActive }) =>
                 cn(
-                  // Eight destinations have to fit a 375px phone, so the mobile
+                  // Ten destinations have to fit a 375px phone, so the mobile
                   // label runs tight, unpadded and a size down; from `sm` up
                   // there is room for the roomier pill treatment.
                   'group flex h-full min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-0 py-2',

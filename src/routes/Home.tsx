@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Brain,
   ClipboardCheck,
+  Compass,
   History,
   MessageCircleQuestion,
   NotebookPen,
@@ -11,6 +12,7 @@ import {
   Sparkles,
   Wind,
 } from 'lucide-react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AppNav } from '../components/AppNav'
 import { TimeMotif } from '../components/home/TimeMotif'
@@ -23,6 +25,7 @@ import { cn } from '../lib/cn'
 import { timeOfDay } from '../lib/date'
 import { staggerChild, staggerParent } from '../lib/motion'
 import { copingStyle, greetingFor, reasonLabel, type CopingStyleId } from '../lib/profile'
+import { markTourSeen, readTourSeen } from '../lib/storage'
 
 /** The screens Mindful can take you to, in the order most people want them. */
 const SURFACES = [
@@ -59,6 +62,12 @@ const SURFACES = [
   },
   { to: '/breathe', icon: Wind, title: 'Breathe', body: 'Triangle, 4-7-8 or a slower, even rhythm.' },
   {
+    to: '/tour',
+    icon: Compass,
+    title: 'Show me around',
+    body: 'A working walkthrough of everything here. Two minutes.',
+  },
+  {
     to: '/settings',
     icon: SettingsIcon,
     title: 'Your data',
@@ -84,8 +93,18 @@ export function Home() {
   const { profile, resetProfile } = useProfile()
   const navigate = useNavigate()
 
+  // Offered once, on the first arrival here, and then never unprompted again.
+  // A walkthrough that reappears every visit is a thing people learn to close
+  // without reading, which costs the tour the only attention it will ever get.
+  const [invite, setInvite] = useState(() => !readTourSeen())
+
   // RequireProfile guarantees a profile before this renders.
   if (!profile) return null
+
+  function dismissInvite() {
+    markTourSeen()
+    setInvite(false)
+  }
 
   const style = copingStyle(profile.copingStyle)
   const greeting = greetingFor(new Date())
@@ -133,6 +152,51 @@ export function Home() {
           Nothing is due and nothing is tracked. Whenever you have a minute, start with the thing
           you said helps most.
         </motion.p>
+
+        {/*
+          First visit only. Deliberately quieter than the suggested action
+          below it — someone who has just finished onboarding came here to do
+          something, not to be handed a manual, so this offers and gets out of
+          the way rather than blocking the screen.
+        */}
+        {invite ? (
+          <motion.section
+            variants={staggerChild}
+            aria-labelledby="tour-invite-heading"
+            className="mt-8"
+          >
+            <Card tone="sunken" padding="md">
+              <div className="flex items-start gap-3.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-primary shadow-soft">
+                  <Compass aria-hidden="true" className="h-4.5 w-4.5" />
+                </span>
+
+                <div className="flex-1">
+                  <h2 id="tour-invite-heading" className="text-lg font-medium text-text">
+                    Would you like a look around first?
+                  </h2>
+                  <p className="mt-1 max-w-prose text-sm text-text-muted">
+                    Two minutes, and everything in it actually works — including the bit that
+                    answers health questions from published evidence.
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <Link
+                      to="/tour"
+                      onClick={dismissInvite}
+                      className={buttonStyles({ variant: 'secondary', size: 'sm' })}
+                    >
+                      Show me around
+                    </Link>
+                    <Button variant="ghost" size="sm" onClick={dismissInvite}>
+                      No thanks
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </motion.section>
+        ) : null}
 
         {/* The one suggested action, drawn from the chosen coping style. */}
         <motion.div variants={staggerChild} className="mt-9">
