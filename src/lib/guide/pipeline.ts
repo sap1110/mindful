@@ -1,10 +1,12 @@
 import { expandQuery } from '../echo/expand'
 import { maximalMarginalRelevance, reciprocalRankFusion, tokenSimilarity } from '../echo/fuse'
-import { bm25Ranking, buildLexicalIndex, overlap, tokenize } from '../echo/keyword'
+import { bm25Ranking, buildLexicalIndex, tokenize } from '../echo/keyword'
 import { similarity } from '../echo/retrieve'
 import {
   EVIDENCE_CORPUS,
   evidenceEmbeddingText,
+  evidenceRelevance,
+  topicAnchors,
   type EvidenceDoc,
 } from './evidence'
 import { classifyIntent, type IntentResult } from './intent'
@@ -84,6 +86,25 @@ export interface GuidePipelineInput {
 const CLARIFY_FLOOR = 0.06
 /** How many documents an answer may cite. */
 const MAX_SOURCES = 3
+
+/**
+ * How many fused results diversity re-ranking is allowed to choose from.
+ *
+ * Re-ranking over the entire fused list let it reach past a hundred documents
+ * for something dissimilar. Fifteen is enough for genuine variety among things
+ * that are actually about the question.
+ */
+const RERANK_POOL = 15
+
+/**
+ * How relevant a second or third citation must be, relative to the best one.
+ *
+ * Not a fixed floor, because "relevant enough" depends on what was available:
+ * a question with one excellent match should not pick up two mediocre ones
+ * just because they cleared an absolute threshold set for questions with no
+ * excellent match at all.
+ */
+const COMPANION_RELEVANCE_RATIO = 0.55
 
 /**
  * Content words a question needs before it is worth searching for at all.
@@ -179,13 +200,32 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
    * will always find *something* for any three words, so vagueness is measured
    * on the question rather than inferred from a failed classification.
    */
-  const contentWords = [...tokenize(trimmed)].filter((term) => !PLACEHOLDER_TERMS.has(term)).length
-  const tooVague = risk.level === 'unknown' || contentWords < MIN_ANSWERABLE_WORDS
+  const queryTokens = tokenize(trimmed)
+  const content = [...queryTokens].filter((term) => !PLACEHOLDER_TERMS.has(term))
+  const anchors = topicAnchors()
+  const named = content.filter((term) => anchors.has(term))
+
+  /*
+   * Short is not the same as vague, and the first version of this gate could
+   * not tell the difference. "what are the symptoms of depression" and "what
+   * can I do about acne" both come down to one or two content words once the
+   * stopwords go, and both were being asked back — a system holding a document
+   * literally titled "What are the symptoms of Depression?" replying that it
+   * needs more detail first.
+   *
+   * So vagueness is measured by whether the question *names* anything the
+   * corpus knows about, and only falls back to counting words when it names
+   * nothing. "is this bad" still clarifies, because "bad" is not the name of
+   * anything.
+   */
+  const tooVague =
+    risk.level === 'unknown' ||
+    (named.length === 0 && content.length < MIN_ANSWERABLE_WORDS)
 
   if (tooVague) {
     trace.push({
       name: 'route',
-      note: `too little to go on (${contentWords} content words) — asking instead`,
+      note: `nothing specific named (${content.length} content words) — asking instead`,
     })
     return finish(trimmed, 'clarify', intent, risk, null, null, [...CLARIFYING_QUESTIONS], intent.confidence, trace)
   }
@@ -198,8 +238,35 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
   )
   const docById = new Map(EVIDENCE_CORPUS.map((doc) => [doc.id, doc]))
 
-  const lexical = bm25Ranking(index, terms)
-  const expanded = expansions.length > 0 ? bm25Ranking(index, expansions) : []
+  /*
+   * BM25, scaled by how much of the question each document covers.
+   *
+   * BM25 alone ranks by how strongly a document argues for the terms it
+   * happens to contain, and term frequency is part of that argument. Asked
+   * "how do I stop panic attacks" it returned a page about gallstone
+   * *attacks*: that page says "attack" many times, and repetition outweighed
+   * having nothing whatever to do with panic. Past five hundred documents
+   * there is always some page repeating one of your words.
+   *
+   * Multiplying by coverage — the share of the question's information the
+   * document addresses, each term counted once — answers the complementary
+   * question. BM25 finds the page most *about* a term; coverage finds the page
+   * about the *most of* the question. A page missing the word the question was
+   * really about now pays for it however often it repeats the rest.
+   */
+  const covered = (id: string) => {
+    const doc = docById.get(id)
+    return doc ? evidenceRelevance(queryTokens, doc) : 0
+  }
+
+  const scaleByCoverage = (ranking: readonly { id: string; score: number }[]) =>
+    ranking
+      .map((entry) => ({ id: entry.id, score: entry.score * covered(entry.id) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+
+  const lexical = scaleByCoverage(bm25Ranking(index, terms))
+  const expanded = expansions.length > 0 ? scaleByCoverage(bm25Ranking(index, expansions)) : []
   const denseRanking = dense
     ? dense.docs
         .map((entry) => ({ id: entry.doc.id, score: similarity(dense.queryVector, entry.vector) }))
@@ -213,10 +280,9 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
     ...(expanded.length > 0 ? [{ ranking: expanded, weight: 0.35, label: 'related words' }] : []),
   ])
 
-  const queryTokens = tokenize(trimmed)
   const relevanceOf = (doc: EvidenceDoc) =>
     Math.max(
-      overlap(queryTokens, tokenize(evidenceEmbeddingText(doc))),
+      evidenceRelevance(queryTokens, doc),
       dense
         ? similarity(
             dense.queryVector,
@@ -225,9 +291,40 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
         : 0,
     )
 
+  /*
+   * Diversity re-ranking, over a shortlist and on a comparable scale.
+   *
+   * Both of those are corrections to a real failure. Reciprocal-rank fusion
+   * scores sit around 1/61 at the top and decay to 1/160 by rank 100 — a total
+   * spread of about 0.01 — while the redundancy term they were being traded
+   * against is a Jaccard overlap that ranges over the whole 0-1. With
+   * λ = 0.72 that arithmetic is not close: 0.72 × 0.01 against 0.28 × 0.3
+   * means relevance was contributing almost nothing and MMR was, in effect,
+   * picking the two documents in the corpus *least* like the one it had
+   * already chosen.
+   *
+   * That is precisely what people saw. "I think I might be depressed" cited a
+   * page about hearing aids; "my stomach hurts after eating" cited postpartum
+   * depression. The top document was usually right and its companions were
+   * chosen for being unlike it.
+   *
+   * So: shortlist first, then normalise the scores across that shortlist so
+   * relevance actually spans 0-1 and outweighs diversity as λ says it should.
+   * Diversity now does its intended job — breaking ties between near-duplicate
+   * documents — instead of driving the selection.
+   */
+  const shortlist = fused.slice(0, RERANK_POOL)
+  const best = shortlist[0]?.score ?? 0
+  const worst = shortlist[shortlist.length - 1]?.score ?? 0
+  const spread = best - worst
+
   const reranked = maximalMarginalRelevance(
-    fused
-      .map((entry) => ({ id: entry.id, item: docById.get(entry.id)!, relevance: entry.score }))
+    shortlist
+      .map((entry) => ({
+        id: entry.id,
+        item: docById.get(entry.id)!,
+        relevance: spread > 0 ? (entry.score - worst) / spread : 1,
+      }))
       .filter((entry) => entry.item),
     {
       similarity: (a, b) => tokenSimilarity(tokenize(a.body), tokenize(b.body)),
@@ -246,11 +343,22 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
    * only "headache": four common words beating one rare one is the exact
    * failure IDF exists to prevent.
    */
-  const selected = reranked
-    .map(({ item }) => ({ doc: item, relevance: relevanceOf(item) }))
-    .filter((entry) => entry.relevance >= CITATION_RELEVANCE_FLOOR)
+  const scored = reranked.map(({ item }) => ({ doc: item, relevance: relevanceOf(item) }))
+  const topRelevance = scored.reduce((high, entry) => Math.max(high, entry.relevance), 0)
 
-  const topRelevance = selected.reduce((best, entry) => Math.max(best, entry.relevance), 0)
+  /*
+   * A citation must clear the absolute floor *and* stand up next to the best
+   * document found. The relative cut is what stops a strong first citation
+   * from dragging two weak ones onto the page behind it: if the best document
+   * covers the question well and the third covers a third as much of it, the
+   * third is not a second opinion, it is noise with a logo on it.
+   */
+  const floor = Math.max(CITATION_RELEVANCE_FLOOR, topRelevance * COMPANION_RELEVANCE_RATIO)
+  const selected = scored.filter((entry) =>
+    entry.relevance === topRelevance
+      ? entry.relevance >= CITATION_RELEVANCE_FLOOR
+      : entry.relevance >= floor,
+  )
   trace.push({
     name: 'retrieve',
     note: `${selected.length} of ${EVIDENCE_CORPUS.length} documents selected, ${dense ? 'hybrid' : 'by words'}, best ${topRelevance.toFixed(2)}`,

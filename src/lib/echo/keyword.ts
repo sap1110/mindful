@@ -38,9 +38,22 @@ const STOPWORDS = new Set([
   'will', 'with', 'would', 'you', 'your',
 ])
 
-/** Crude but predictable suffix folding, so "feeling" reaches "feel". */
+/**
+ * Crude but predictable suffix folding, so "feeling" reaches "feel".
+ *
+ * `-ion` is here for a specific failure. People describe themselves with the
+ * adjective and public health bodies title their pages with the noun: someone
+ * types "I think I might be depressed" and every document says "depression".
+ * Without this, those are two unrelated words — the question was retrieving
+ * pages about insomnia and hearing loss because the only word it could match
+ * on was "think". The same fold quietly fixes infected/infection,
+ * inflamed/inflammation and prevented/prevention.
+ *
+ * `-ions` before `-ion` because the loop takes the first suffix that matches
+ * and "depressions" must not stop at the `s`.
+ */
 function stem(word: string): string {
-  for (const suffix of ['ing', 'ness', 'ed', 'ly', 's']) {
+  for (const suffix of ['ions', 'ion', 'ing', 'ness', 'ed', 'ly', 's']) {
     if (word.length > suffix.length + 2 && word.endsWith(suffix)) {
       return word.slice(0, -suffix.length)
     }
@@ -178,6 +191,66 @@ function inverseDocumentFrequency(index: LexicalIndex, term: string): number {
   const containing = index.documentFrequency.get(term) ?? 0
   const total = index.documents.length
   return Math.max(0, Math.log(1 + (total - containing + 0.5) / (containing + 0.5)))
+}
+
+/**
+ * How much of a question a document covers, 0-1, on BM25's own terms.
+ *
+ * `overlap` counts shared words and treats them as equal, which is how a page
+ * about hearing aids came to be cited for "I think I might be depressed": it
+ * contained "think" and "might", and two words out of three looked like
+ * two-thirds relevant. Every unrelated citation people saw traces back to that
+ * arithmetic.
+ *
+ * This is BM25's numerator divided by the most any document could score on the
+ * same question, which buys the two properties overlap lacks:
+ *
+ *   rarity        a shared "depressed" outweighs a shared "think", because
+ *                 IDF says so — the same weighting the ranking already uses.
+ *   length        a long document is not relevant merely for being long. Term
+ *                 saturation and the b=0.75 length normalisation are what stop
+ *                 a 700-word page from containing everyone's question.
+ *
+ * Using the ranker's own scoring for the *citation* decision also ends a
+ * disagreement that used to cost good answers: retrieval ranked by BM25 and
+ * then a different measure decided what could be cited, so the verifier would
+ * reject documents retrieval had been confident about.
+ */
+export function coverage(
+  index: LexicalIndex,
+  document: LexicalDocument,
+  query: readonly string[],
+): number {
+  if (index.averageLength === 0) return 0
+
+  const normalisation = 1 - B + (B * document.length) / index.averageLength
+  let score = 0
+  let ceiling = 0
+
+  for (const term of new Set(query)) {
+    // Floored so a question made entirely of common words still divides by
+    // something rather than reporting 0/0 as a perfect match.
+    const weight = Math.max(0.05, inverseDocumentFrequency(index, term))
+    ceiling += weight
+
+    const frequency = document.terms.get(term)
+    if (frequency) {
+      /*
+       * Clamped per term, which is the difference between coverage and
+       * enthusiasm. BM25's saturation lets a term repeated often score up to
+       * k1+1 = 2.2 times a single mention, so two words mentioned repeatedly
+       * could out-score three words mentioned once — a document missing the
+       * one word the question was about could reach 0.91 of a perfect match.
+       * Capping each term at its own weight means a missing word always costs
+       * its full share, and the result is genuinely "how much of this question
+       * does this document address".
+       */
+      const saturation = (frequency * (K1 + 1)) / (frequency + K1 * normalisation)
+      score += weight * Math.min(1, saturation)
+    }
+  }
+
+  return ceiling === 0 ? 0 : score / ceiling
 }
 
 export function bm25(index: LexicalIndex, document: LexicalDocument, query: string[]): number {

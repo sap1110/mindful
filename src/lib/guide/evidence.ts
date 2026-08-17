@@ -1,5 +1,12 @@
 import { GUIDANCE as CONCUSSION_GUIDANCE, EVIDENCE_SOURCES } from '../concussion/evidence'
 import { NEUROSCIENCE_NOTES } from '../concussion/neuroscience'
+import {
+  buildLexicalIndex,
+  coverage,
+  tokenize,
+  type LexicalDocument,
+  type LexicalIndex,
+} from '../echo/keyword'
 import { LIBRARY, LIBRARY_SOURCES } from '../echo/library'
 import medquad from './models/medquad-evidence'
 
@@ -360,4 +367,88 @@ export function evidenceEmbeddingText(doc: EvidenceDoc): string {
 
 export function evidenceDoc(id: string): EvidenceDoc | undefined {
   return EVIDENCE_CORPUS.find((doc) => doc.id === id)
+}
+
+/* ---------------------------------------------------- what the corpus knows */
+
+/**
+ * One index over the corpus, built once, shared by everything that needs to
+ * know how rare a word is.
+ *
+ * Built lazily rather than at module load: importing this file must not cost
+ * three hundred tokenisations on a screen that never asks a question.
+ */
+let corpusIndex: LexicalIndex | null = null
+let byId: Map<string, LexicalDocument> | null = null
+
+function index(): LexicalIndex {
+  if (!corpusIndex) {
+    corpusIndex = buildLexicalIndex(
+      EVIDENCE_CORPUS.map((doc) => ({ id: doc.id, text: evidenceEmbeddingText(doc) })),
+    )
+    byId = new Map(corpusIndex.documents.map((doc) => [doc.id, doc]))
+  }
+  return corpusIndex
+}
+
+/**
+ * How much of a question a document actually covers, 0-1.
+ *
+ * The single definition of "does this document pertain to this question",
+ * used by retrieval to decide what may be cited and by the verifier to check
+ * that decision independently. It is IDF-weighted, so a shared "depressed"
+ * counts for far more than a shared "think" and "might" — see
+ * `weightedOverlap` for the failure that made this necessary.
+ */
+export function evidenceRelevance(queryTokens: ReadonlySet<string>, doc: EvidenceDoc): number {
+  index()
+  const indexed = byId?.get(doc.id)
+  return indexed ? coverage(index(), indexed, [...queryTokens]) : 0
+}
+
+/**
+ * Every word in the corpus specific enough to be the subject of a question.
+ *
+ * Drawn from the titles, topics and everyday phrasings of the documents
+ * themselves, then cut to the words that appear in under a tenth of the
+ * corpus. "depression", "acne", "migraine", "insomnia" survive; "what",
+ * "help", "pain", "people" do not, because a word in a third of the documents
+ * names nothing in particular.
+ *
+ * This exists so that a short question is not mistaken for a vague one.
+ * "what can I do about acne" has one content word and is perfectly clear;
+ * "is this bad" has one content word and is not. Counting words cannot tell
+ * them apart. Asking whether the question names something the corpus knows
+ * about can.
+ */
+let anchors: Set<string> | null = null
+
+export function topicAnchors(): ReadonlySet<string> {
+  if (anchors) return anchors
+
+  const built = new Set<string>()
+  const ceiling = Math.max(2, Math.floor(EVIDENCE_CORPUS.length * 0.1))
+
+  /*
+   * The `topic` field only — not the titles, and certainly not the cues.
+   *
+   * Both wider readings let the gate through things that are not names.
+   * The cues are everyday phrasings ("my head hurts"), which made "hurt" and
+   * "worried" into subjects and got "it hurts" answered as though it were a
+   * specific question. Titles are better but not clean either: the concussion
+   * notes are titled in sentences, and "If light and screens hurt…" put
+   * "hurt" straight back in.
+   *
+   * `topic` is the one field that is a name by construction — 'headache',
+   * 'insomnia', 'acne', 'knee' — assigned to every document from an explicit
+   * list. It is exactly the vocabulary of things this corpus can be about.
+   */
+  for (const doc of EVIDENCE_CORPUS) {
+    for (const term of tokenize(doc.topic)) {
+      if ((index().documentFrequency.get(term) ?? 0) <= ceiling) built.add(term)
+    }
+  }
+
+  anchors = built
+  return anchors
 }

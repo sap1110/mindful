@@ -1,5 +1,5 @@
-import { overlap, tokenize } from '../echo/keyword'
-import { evidenceDoc, evidenceEmbeddingText } from './evidence'
+import { tokenize } from '../echo/keyword'
+import { evidenceDoc, evidenceRelevance } from './evidence'
 import type { SafeResponse } from './compose'
 
 /**
@@ -127,7 +127,7 @@ export function verifyResponse(query: string, response: SafeResponse): Verdict {
       issues.push(`claim is not present in its cited document (${doc.id})`)
     }
 
-    if (overlap(queryTokens, tokenize(evidenceEmbeddingText(doc))) >= CITATION_RELEVANCE_FLOOR) {
+    if (evidenceRelevance(queryTokens, doc) >= CITATION_RELEVANCE_FLOOR) {
       relevantCitations += 1
     } else {
       issues.push(`cited document ${doc.id} does not pertain to the question`)

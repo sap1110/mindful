@@ -29,7 +29,7 @@
  * corpus is reviewable in a diff. Re-running this script reproduces it.
  */
 
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -178,15 +178,104 @@ const TOPICS = [
   "vaccines",
   "hand washing",
   "hygiene",
+
+  /*
+   * Added after probing the corpus with ordinary questions rather than the
+   * ones it was built for. "my knee hurts when I run" and "how do I know if I
+   * have ADHD" both got confident answers about something else entirely,
+   * because the honest answer — nothing here covers that — was not available
+   * to a corpus that had never heard of knees.
+   *
+   * Everything below is a topic a real question arrived at and found nothing.
+   */
+  "knee",
+  "shoulder",
+  "hip",
+  "elbow",
+  "ankle",
+  "foot",
+  "wrist",
+  "sciatica",
+  "tendinitis",
+  "carpal tunnel",
+  "sports injuries",
+  "sprains and strains",
+  "attention deficit",
+  "adhd",
+  "autism",
+  "eating disorders",
+  "grief",
+  "child mental health",
+  "teen mental health",
+  "seasonal affective",
+  "sleep apnea",
+  "snoring",
+  "restless legs",
+  "chronic fatigue",
+  "fibromyalgia",
+  "irritable bowel",
+  "gerd",
+  "ulcer",
+  "gallstones",
+  "food poisoning",
+  "lactose",
+  "celiac",
+  "hemorrhoids",
+  "urinary tract",
+  "kidney stones",
+  "menstruation",
+  "premenstrual",
+  "endometriosis",
+  "psoriasis",
+  "hives",
+  "shingles",
+  "cold sores",
+  "athlete's foot",
+  "warts",
+  "hair loss",
+  "dry skin",
+  "sunburn",
+  "insect bites",
+  "dental",
+  "toothache",
+  "dry eye",
+  "conjunctivitis",
+  "tinnitus",
+  "osteoporosis",
+  "gout",
+  "varicose",
+  "vitamin d",
+  "vitamin b12",
+  "covid",
+  "sore muscles",
+  "swelling",
+  "numbness",
+  "tremor",
+  "memory",
+  "cough",
+  "fainting",
 ];
 
 /** Longest a document may be. Long enough to be useful, short enough to quote. */
 const MAX_CHARS = 700;
 /** Shorter than this and the answer is a stub, not evidence. */
 const MIN_CHARS = 120;
-/** Keep the corpus reviewable and the bundle sane. */
-const MAX_PER_TOPIC = 6;
+/**
+ * Keep the corpus reviewable and the bundle sane.
+ *
+ * Eight per topic rather than six: with the topic list widened, the binding
+ * constraint on answering "my knee hurts" was breadth, not depth, and a
+ * handful of documents per topic is enough for retrieval to have a choice
+ * while keeping the shipped corpus something a person could read.
+ */
+const MAX_PER_TOPIC = 8;
 const MAX_DOCUMENTS = 900;
+
+/** Attempts per page before it is treated as missing, and the backoff step. */
+const ATTEMPTS = 5;
+const BACKOFF_MS = 3000;
+/** How many lost pages make the whole corpus untrustworthy. */
+const MAX_MISSING_PAGES = 4;
 
 function matchesTopic(focus) {
   const lowered = (focus ?? "").toLowerCase();
@@ -216,45 +305,190 @@ function tidyQuestion(question) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Ask the server for one source's rows rather than paging the whole dataset.
+/*
+ * Pages are cached on disk, and that is the difference between a re-run being
+ * free and a re-run being another forty minutes of somebody's electricity.
  *
- * Scanning all 47k rows client-side meant ~470 requests and a rate limit at
- * offset 5,100 — and the first five thousand rows are genetics pages this
- * script discards anyway. Filtering server-side by `document_source` cuts it
- * to a few dozen requests over the ~2,000 rows that could possibly qualify.
+ * The dataset server returns intermittent 500s, so a build can fail through no
+ * fault of this script — and every previous failure threw away every page it
+ * had successfully fetched. With the cache, a second attempt re-fetches only
+ * what is genuinely missing, which is usually a handful of pages.
+ *
+ * The cache lives under node_modules, so it is already ignored by git and
+ * disappears with a clean install. Delete it to force a truly fresh build.
  */
-async function fetchFiltered(source, offset) {
+const CACHE = join(HERE, "..", "node_modules", ".cache", "medquad");
+mkdirSync(CACHE, { recursive: true });
+
+const cachePath = (source, offset) => join(CACHE, `${source}-${offset}.json`);
+
+let fromCache = 0;
+let fromNetwork = 0;
+
+/**
+ * One page: from disk if we already have it, otherwise from the server.
+ *
+ * Returns null only when the page could not be had at all. Callers treat that
+ * as missing rather than empty — the two are very different, and conflating
+ * them is how a corpus ends up quietly short of a topic.
+ */
+async function fetchPage(source, offset) {
+  const path = cachePath(source, offset);
+  if (existsSync(path)) {
+    try {
+      const cached = JSON.parse(readFileSync(path, "utf8"));
+      if (Array.isArray(cached.rows)) {
+        fromCache += 1;
+        return cached;
+      }
+    } catch {
+      // A truncated cache file is worth exactly nothing; fetch it again.
+    }
+  }
+
   const where = encodeURIComponent(`"document_source"='${source}'`);
   const url =
     `https://datasets-server.huggingface.co/filter?dataset=${DATASET}` +
     `&config=default&split=train&where=${where}&offset=${offset}&length=${PAGE}`;
 
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const response = await fetch(url);
-    if (response.ok) return response.json();
-    // The index may still be warming, or we may be going too fast.
-    await sleep(2500 * (attempt + 1));
+  let last = "";
+  for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
+    try {
+      // Bounded, because an unbounded fetch is how this script once hung for
+      // twenty minutes on a single page with nothing to show for it.
+      const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      if (response.ok) {
+        const page = await response.json();
+        writeFileSync(
+          path,
+          JSON.stringify({
+            rows: page.rows ?? [],
+            num_rows_total: page.num_rows_total ?? 0,
+          }),
+        );
+        fromNetwork += 1;
+        return page;
+      }
+      last = `${response.status} ${response.statusText}`;
+    } catch (error) {
+      last = error.message;
+    }
+    await sleep(BACKOFF_MS * (attempt + 1));
   }
-  throw new Error(`failed to fetch ${source} at offset ${offset}`);
+
+  console.warn(`\n  ! ${source}@${offset} unavailable: ${last}`);
+  return null;
 }
 
-const perTopic = new Map();
-const seen = new Set();
-const documents = [];
+/* --------------------------------------------------------- phase 1: fetch */
+
+/*
+ * Fetching and selecting are two phases rather than one loop, and that
+ * separation is a bug fix rather than tidiness.
+ *
+ * When they were interleaved, a page that failed and was retried at the end of
+ * its source arrived *after* pages that came later in the dataset — by which
+ * time the per-topic quota was already full, so the recovered page contributed
+ * nothing. That is exactly how one run produced "anxiety: 1" while reporting
+ * success: the anxiety page had been fetched, retried, recovered, and then
+ * silently discarded for arriving late.
+ *
+ * Fetch everything first, then select in a fixed order, and the corpus stops
+ * depending on which requests happened to fail.
+ */
+const pages = new Map();
+const missing = [];
 
 console.log("Fetching the consumer-facing MedQuAD sources…");
 
 for (const source of SOURCES.keys()) {
-  let offset = 0;
-  let sourceTotal = Infinity;
-  console.log(`\n${source}`);
+  process.stdout.write(`\n${source}\n`);
 
-  while (offset < sourceTotal && documents.length < MAX_DOCUMENTS) {
-    const page = await fetchFiltered(source, offset);
-    sourceTotal = page.num_rows_total ?? 0;
+  /*
+   * The row count arrives with the first page, so a source whose first page
+   * will not load cannot be paged at all. This is worth more patience than any
+   * other request in the build: losing it loses the entire source, which is how
+   * every NINDS document once vanished from a build that reported success.
+   */
+  let first = null;
+  for (let attempt = 0; attempt < 4 && !first; attempt += 1) {
+    if (attempt > 0) {
+      console.warn(`  first page failed, waiting before another attempt…`);
+      await sleep(20000);
+    }
+    first = await fetchPage(source, 0);
+  }
 
-    for (const { row } of page.rows) {
+  if (!first) {
+    throw new Error(
+      `could not read the first page of ${source} — the whole source would be missing. ` +
+        `Nothing was written; every page that did arrive is cached, so a re-run resumes.`,
+    );
+  }
+
+  const total = first.num_rows_total ?? 0;
+  pages.set(`${source}@0`, first.rows ?? []);
+
+  for (let offset = PAGE; offset < total; offset += PAGE) {
+    const page = await fetchPage(source, offset);
+    if (page) pages.set(`${source}@${offset}`, page.rows ?? []);
+    else missing.push({ source, offset });
+
+    process.stdout.write(`\r  ${Math.min(offset + PAGE, total)}/${total} fetched`);
+    await sleep(400);
+  }
+}
+
+/*
+ * One more pass at whatever the server refused, once it has had time to
+ * recover. Everything already fetched is cached, so this costs only the pages
+ * that actually failed.
+ */
+if (missing.length > 0) {
+  console.log(`\n\nRetrying ${missing.length} page(s) the server refused…`);
+  await sleep(10000);
+
+  for (let index = missing.length - 1; index >= 0; index -= 1) {
+    const { source, offset } = missing[index];
+    const page = await fetchPage(source, offset);
+    if (page) {
+      pages.set(`${source}@${offset}`, page.rows ?? []);
+      missing.splice(index, 1);
+    }
+  }
+}
+
+console.log(
+  `\n${pages.size} pages in hand (${fromCache} cached, ${fromNetwork} fetched)` +
+    `${missing.length > 0 ? `, ${missing.length} still missing` : ""}.`,
+);
+
+if (missing.length > MAX_MISSING_PAGES) {
+  throw new Error(
+    `${missing.length} pages could not be fetched — the corpus would be thinner than it claims. ` +
+      `Nothing was written; what did arrive is cached, so a re-run fetches only the rest.`,
+  );
+}
+
+/* -------------------------------------------------------- phase 2: select */
+
+/*
+ * Deterministic given the pages: sources in declaration order, offsets
+ * ascending, first come first served within each topic's quota. The same pages
+ * always produce the same corpus, whatever order they arrived in.
+ */
+const perTopic = new Map();
+const seen = new Set();
+const documents = [];
+
+outer: for (const source of SOURCES.keys()) {
+  const offsets = [...pages.keys()]
+    .filter((key) => key.startsWith(`${source}@`))
+    .map((key) => Number(key.slice(source.length + 1)))
+    .sort((a, b) => a - b);
+
+  for (const offset of offsets) {
+    for (const { row } of pages.get(`${source}@${offset}`)) {
       const org = SOURCES.get(row.document_source);
       const intent = TYPES.get((row.question_type ?? "").toLowerCase());
       if (!org || !intent) continue;
@@ -286,8 +520,8 @@ for (const source of SOURCES.keys()) {
         org,
         title: question || `${row.question_focus} — ${row.question_type}`,
         // Forced to https. MedQuAD carries some http:// URLs from older NIH
-        // pages, and an http link in a health app leaks which condition
-        // someone just read about, in cleartext, to anyone on the network.
+        // pages, and an http link in a health app leaks which condition someone
+        // just read about, in cleartext, to anyone on the network.
         url: (row.document_url ?? "").replace(/^http:\/\//, "https://"),
         retrieved: RETRIEVED,
         body: truncate(answer),
@@ -297,15 +531,47 @@ for (const source of SOURCES.keys()) {
         ],
       });
 
-      if (documents.length >= MAX_DOCUMENTS) break;
+      if (documents.length >= MAX_DOCUMENTS) break outer;
     }
-
-    offset += PAGE;
-    process.stdout.write(
-      `  ${Math.min(offset, sourceTotal)}/${sourceTotal} scanned, ${documents.length} kept\r`,
-    );
-    await sleep(400);
   }
+}
+
+const REQUIRED_TOPICS = [
+  "anxiety",
+  "depression",
+  "panic disorder",
+  "stress",
+  "sleep",
+  "insomnia",
+  "headache",
+  "migraine",
+  "fatigue",
+  "back pain",
+  "cough",
+  "fever",
+  "stomach",
+  "dizziness",
+];
+
+/**
+ * Depth, not just presence.
+ *
+ * A run that lost pages still produces *a* document for most topics, so
+ * "anxiety: 1" passes a presence check while being the visible edge of a
+ * corpus with holes in it — the same run had "anxiety: 5" when the server was
+ * healthy. Three is the line: below it, something was lost.
+ */
+const MIN_PER_REQUIRED_TOPIC = 3;
+
+const thin = REQUIRED_TOPICS.filter(
+  (topic) => (perTopic.get(topic) ?? 0) < MIN_PER_REQUIRED_TOPIC,
+).map((topic) => `${topic} (${perTopic.get(topic) ?? 0})`);
+
+if (thin.length > 0) {
+  throw new Error(
+    `the corpus came back thin on: ${thin.join(", ")}. ` +
+      `Almost certainly skipped pages rather than missing topics — nothing was written. Re-run.`,
+  );
 }
 
 // Asserted rather than trusted: a duplicate id is silent corruption that only
