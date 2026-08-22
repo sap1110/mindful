@@ -27,7 +27,9 @@ Built solo for **Hack for Humanity, Summer 2026**.
 - [What it does](#what-it-does)
 - [The privacy model](#the-privacy-model)
 - [How the AI works](#how-the-ai-works)
+- [Ask: an evidence-first health pipeline](#ask-an-evidence-first-health-pipeline)
 - [Concussion recovery](#concussion-recovery)
+- [Breathing, with the screen closed](#breathing-with-the-screen-closed)
 - [Not a diagnosis](#not-a-diagnosis)
 - [Getting started](#getting-started)
 - [Deploying](#deploying)
@@ -37,6 +39,7 @@ Built solo for **Hack for Humanity, Summer 2026**.
 - [Accessibility](#accessibility)
 - [Testing](#testing)
 - [Attribution](#attribution)
+- [Conventions](#conventions)
 - [Licence](#licence)
 
 ---
@@ -46,6 +49,7 @@ Built solo for **Hack for Humanity, Summer 2026**.
 | Screen | What it is |
 | ------ | ---------- |
 | **Landing** | Sets the tone. A live breath, a sample of the check-in, and nothing that needs explaining |
+| **Tour** | A seven-step walkthrough that runs the real pipeline on real input. Ungated and writes nothing, so it can be seen before committing to anything |
 | **Onboarding** | Name → what brings you here → coping style. Completing it is what "signed in" means |
 | **Home** | Your space, with a greeting shaped by the profile |
 | **Mood** | A daily check-in with tags and an optional note. One entry a day, editable, 30 days of history |
@@ -139,7 +143,7 @@ guard → expand → retrieve → fuse → aggregate → rerank → verify
    no dependency on the model having downloaded. Written in the language people
    actually use — contractions folded, and the moderation-era euphemisms
    ("kms", "unalive") caught alongside the clinical phrasing — held up by a
-   73-case battery of acute, concerning, and deliberately benign phrasings, and
+   71-case battery of acute, concerning, and deliberately benign phrasings, and
    **audited against ~53,000 real statements** (see below).
 2. **expand** — stemming, contraction folding, and a curated near-synonym set
    applied to the query only.
@@ -271,7 +275,7 @@ pairs):
 | Retrieval accuracy | 1.00 | ≥ 0.90 |
 | Citation accuracy | 1.00 | ≥ 0.99 |
 | Clarification recall | 1.00 | must be 1.00 |
-| Median latency | <1ms | — |
+| Median latency | ~23ms | — |
 
 The harness caught three real defects during development: an escalation miss on
 a cauda-equina phrasing, intent scores diluted by query length, and generic
@@ -285,8 +289,8 @@ heuristics alone. Two heads per task, from the same data:
 
 | Head | Features | Intent macro-F1 | Risk macro-F1 |
 | ---- | -------- | --------------- | ------------- |
-| **embedding** | Sentence vectors from `Xenova/all-MiniLM-L6-v2` | **0.90** | **0.74** |
-| **lexical** | TF-IDF over unigrams and bigrams | 0.63 | 0.41 |
+| **embedding** | Sentence vectors from `Xenova/all-MiniLM-L6-v2` | **0.90** | **0.75** |
+| **lexical** | TF-IDF over unigrams and bigrams | 0.65 | 0.41 |
 
 The embedding head is ordinary transfer learning, and it is the reason the
 classifier generalises past the phrasings anyone wrote down: the pretrained
@@ -358,12 +362,11 @@ sits badly with this project's MIT licence, the licence explicitly does not
 cover the privacy rights of the people who wrote those posts, and republishing
 them inside a hackathon entry is the wrong thing to do regardless. What is
 committed is what was learned: the patterns, and the numbers above. Run
-`npx tsx scripts/audit-crisis-guard.ts <path>` against a local copy to reproduce
-them.
+`npm run audit:crisis -- <path>` against a local copy to reproduce them.
 
 ### The evidence corpus
 
-~340 documents, each carrying org, title, topic, type, URL and retrieval date.
+336 documents, each carrying org, title, topic, type, URL and retrieval date.
 Four feeds:
 
 1. **A curated slice of MedQuAD**, the US National Library of Medicine's
@@ -672,7 +675,7 @@ dimmed eyes-closed session.
 
 ## Testing
 
-**227 Playwright tests** across 16 spec files, each screen covered empty and
+**241 Playwright tests** across 18 spec files, each screen covered empty and
 filled, every screen ending in an axe WCAG 2.1 A/AA scan.
 
 ```bash
@@ -687,9 +690,10 @@ npm run test
 | `recovery.spec.ts` | Every gate in the return protocol, including the one that refuses to clear anyone for contact |
 | `breathe.spec.ts` | What the voice says and when, and that it says nothing when switched off |
 | `guide-classifier.spec.ts` | Train/eval disjointness, published metrics, rules outranking the model, corpus id uniqueness |
-| `crisis-language.spec.ts` | 73 phrasings of crisis, concern and everyday idiom — including the euphemisms platform moderation trained people into, and guards against the newer patterns over-reaching |
+| `crisis-language.spec.ts` | 71 phrasings of crisis, concern and everyday idiom — including the euphemisms platform moderation trained people into, and guards against the newer patterns over-reaching |
 | `guide-pipeline.spec.ts` | Ask's eval gates, the verifier red-teamed with corrupted responses, injection inertness |
 | `ask.spec.ts` | The safe-response format on screen, escalation replacing education, a11y in every state |
+| `tour.spec.ts` | Every step reachable and linkable, the privacy claim checked live, and that nothing the tour does touches storage |
 
 Echo's browser tests exercise the **lexical path exclusively**, so nothing
 downloads a model in CI — and that is the path most visitors meet first.
@@ -772,6 +776,10 @@ from `public/fonts/` with their licences alongside. Icons: lucide.
   attributed source, it is the wrong change.
 - The app never clears anyone to return to sport.
 - No runtime network call, ever — including for content and fonts.
+- The CSP exists twice — a `<meta>` tag in `index.html` and a header in
+  `vercel.json` — and they must stay identical. Browsers enforce the
+  intersection of both, so drift does not warn, it silently tightens the app
+  until a feature stops working.
 - Any screen that could read as health guidance renders `<Disclaimer />`;
   `PageShell` does it for you.
 - Run `npm run verify` before pushing.
