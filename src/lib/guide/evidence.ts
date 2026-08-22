@@ -372,6 +372,46 @@ export function evidenceDoc(id: string): EvidenceDoc | undefined {
 /* ---------------------------------------------------- what the corpus knows */
 
 /**
+ * Words that are evaluative rather than topical, dropped from Ask's retrieval.
+ *
+ * BM25 uses rarity as a proxy for informativeness, and on a small curated
+ * corpus that proxy breaks in a specific, damaging way. "how do I sleep
+ * better" was answered from a page about **back pain**: `better` appears in 12
+ * of 336 documents and `sleep` in 33, so `better` carries IDF 3.29 against
+ * `sleep`'s 2.31 and outranks the actual subject of the question. Whichever
+ * page says "gets better" most often wins, and "most back pain gets better
+ * within a few weeks" says it a lot.
+ *
+ * The distinguishing property is not rarity but correlation with subject.
+ * `night` is rarer than `sleep` too (IDF 3.02) and breaks nothing, because the
+ * documents containing "night" *are* the sleep documents. "better" is
+ * scattered across the corpus at random with respect to topic.
+ *
+ * Kept to comparatives and judgements. Nothing here names a symptom, a
+ * feeling or a condition, and emotional vocabulary is deliberately absent —
+ * "low", "tired" and "alone" are all topical in a mental-health corpus.
+ *
+ * Crucially this is *not* added to the shared `STOPWORDS`, which Echo also
+ * uses. Echo searches a person's own journal, where "I feel better today" is
+ * precisely the sentence it exists to find again. The same word is signal in
+ * one corpus and noise in the other, which is why the list is per-corpus
+ * rather than global.
+ */
+export const EVIDENCE_STOPWORDS: ReadonlySet<string> = new Set([
+  'bad',
+  'best',
+  'better',
+  'easier',
+  'fine',
+  'good',
+  'great',
+  'harder',
+  'okay',
+  'worse',
+  'worst',
+])
+
+/**
  * One index over the corpus, built once, shared by everything that needs to
  * know how rare a word is.
  *
@@ -385,10 +425,25 @@ function index(): LexicalIndex {
   if (!corpusIndex) {
     corpusIndex = buildLexicalIndex(
       EVIDENCE_CORPUS.map((doc) => ({ id: doc.id, text: evidenceEmbeddingText(doc) })),
+      EVIDENCE_STOPWORDS,
     )
     byId = new Map(corpusIndex.documents.map((doc) => [doc.id, doc]))
   }
   return corpusIndex
+}
+
+/**
+ * Tokenize a question the way Ask's evidence index is tokenized.
+ *
+ * Every query that will be scored against the corpus has to come through
+ * here. `coverage` charges each query term's IDF to its ceiling whether or not
+ * the index holds that term, and an unindexed term scores about 6.5 against a
+ * real term's 2 to 3 — so tokenizing a query without this list would not
+ * merely leave "better" in, it would divide every relevance score by roughly
+ * three and take the citations down with it.
+ */
+export function evidenceTokens(text: string): Set<string> {
+  return tokenize(text, EVIDENCE_STOPWORDS)
 }
 
 /**

@@ -102,18 +102,32 @@ export function normaliseText(text: string): string {
   return out
 }
 
-/** Tokens in order, which BM25 needs — term frequency is part of the score. */
-export function tokenList(text: string): string[] {
+/**
+ * Tokens in order, which BM25 needs — term frequency is part of the score.
+ *
+ * `extra` is a second stopword set for callers whose corpus makes different
+ * words meaningless. It exists because Echo and Ask search very different
+ * things with the same machinery: "better" is the entire point of a diary
+ * entry that says "I feel better today", and carries no topic at all in a
+ * corpus of health guidance. See `EVIDENCE_STOPWORDS` in `guide/evidence.ts`.
+ *
+ * Whatever set a caller uses, it must use the *same* one for the query as for
+ * the index it searches. `coverage` charges a query term's IDF to the ceiling
+ * whether or not the index contains it, and a term absent from the index
+ * scores far higher than any real one — so a mismatch does not merely ignore a
+ * word, it quietly divides every score by a large constant.
+ */
+export function tokenList(text: string, extra?: ReadonlySet<string>): string[] {
   return normaliseText(text)
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
     .split(/\s+/)
-    .filter((word) => word.length > 2 && !STOPWORDS.has(word))
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word) && !extra?.has(word))
     .map(stem)
 }
 
 /** The distinct tokens in a text. */
-export function tokenize(text: string): Set<string> {
-  return new Set(tokenList(text))
+export function tokenize(text: string, extra?: ReadonlySet<string>): Set<string> {
+  return new Set(tokenList(text, extra))
 }
 
 /**
@@ -155,9 +169,13 @@ export interface LexicalIndex {
 const K1 = 1.2
 const B = 0.75
 
-export function buildLexicalIndex(entries: readonly { id: string; text: string }[]): LexicalIndex {
+export function buildLexicalIndex(
+  entries: readonly { id: string; text: string }[],
+  /** Extra stopwords — must match the ones used to tokenize the query. */
+  extra?: ReadonlySet<string>,
+): LexicalIndex {
   const documents: LexicalDocument[] = entries.map((entry) => {
-    const tokens = tokenList(entry.text)
+    const tokens = tokenList(entry.text, extra)
     const terms = new Map<string, number>()
     for (const token of tokens) terms.set(token, (terms.get(token) ?? 0) + 1)
     return { id: entry.id, terms, length: tokens.length, tokens: new Set(tokens) }

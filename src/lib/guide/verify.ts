@@ -1,5 +1,4 @@
-import { tokenize } from '../echo/keyword'
-import { evidenceDoc, evidenceRelevance } from './evidence'
+import { evidenceDoc, evidenceRelevance, evidenceTokens } from './evidence'
 import type { SafeResponse } from './compose'
 
 /**
@@ -104,7 +103,8 @@ function flatten(text: string): string {
 
 export function verifyResponse(query: string, response: SafeResponse): Verdict {
   const issues: string[] = []
-  const queryTokens = tokenize(query)
+  // The same tokenisation the corpus index uses — see `evidenceTokens`.
+  const queryTokens = evidenceTokens(query)
 
   const evidenceClaims = [...response.directAnswer, ...response.evidenceSays].filter(
     (claim) => claim.kind === 'evidence',

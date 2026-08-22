@@ -3,7 +3,8 @@ import { evaluateGuide, formatGuideReport } from '../src/lib/guide/evaluation'
 import { runGuidePipeline } from '../src/lib/guide/pipeline'
 import { verifyResponse } from '../src/lib/guide/verify'
 import { compose } from '../src/lib/guide/compose'
-import { evidenceDoc } from '../src/lib/guide/evidence'
+import { EVIDENCE_STOPWORDS, evidenceDoc, evidenceTokens } from '../src/lib/guide/evidence'
+import { tokenize } from '../src/lib/echo/keyword'
 
 /**
  * Ask's pipeline, held to the PRD's success criteria in Node — no browser, no
@@ -202,5 +203,58 @@ test.describe('the boundaries hold', () => {
     expect(answer.kind).toBe('escalate')
     expect(answer.response).toBeNull()
     expect(answer.trace.map((stage) => stage.name)).not.toContain('retrieve')
+  })
+})
+
+/**
+ * The failure these guard against: BM25 uses rarity as a proxy for
+ * informativeness, and on a 336-document curated corpus "better" is rarer than
+ * "sleep" (IDF 3.29 against 2.31). "how do I sleep better" was therefore
+ * answered from a page about back pain, which says "gets better" a great deal.
+ *
+ * The fix is a per-corpus stopword list rather than a global one, so the tests
+ * have to pin both halves of that: Ask must ignore the word, and Echo — where
+ * "I feel better today" is the sentence it exists to find again — must not.
+ */
+test.describe('evaluative words do not outrank the subject', () => {
+  const sleepy = /sleep|insomnia/i
+
+  test('"how do I sleep better" is about sleep, not about back pain', () => {
+    const answer = runGuidePipeline({ query: 'how do I sleep better' })
+    expect(answer.kind).toBe('answer')
+
+    const cited = answer.response?.evidenceSays[0]
+    const doc = answer.response?.sources.find((source) => source.id === cited?.docId)
+    expect(`${doc?.topic ?? ''} ${doc?.title ?? ''}`).toMatch(sleepy)
+  })
+
+  test('"what makes anxiety worse" is still about anxiety', () => {
+    const answer = runGuidePipeline({ query: 'what makes anxiety worse' })
+    const cited = answer.response?.evidenceSays[0]
+    const doc = answer.response?.sources.find((source) => source.id === cited?.docId)
+    expect(`${doc?.topic ?? ''} ${doc?.title ?? ''}`).toMatch(/anxiet|stress|mental/i)
+  })
+
+  test('a question left naming nothing is asked back, not guessed at', () => {
+    // "feel" and "low" survive; "better" does not — and two content words that
+    // name no corpus topic is the definition of a question worth asking about.
+    const answer = runGuidePipeline({ query: 'how can I feel better when I am low' })
+    expect(answer.kind).toBe('clarify')
+  })
+
+  test('the evaluative list is scoped to the evidence corpus, not to Echo', () => {
+    // Echo searches a person's own journal. Stripping "better" there would
+    // delete the meaning of the entry rather than the noise around it.
+    expect(EVIDENCE_STOPWORDS.has('better')).toBe(true)
+    expect(tokenize('I feel better today').has('better')).toBe(true)
+    expect(evidenceTokens('I feel better today').has('better')).toBe(false)
+  })
+
+  test('nothing topical was swept up with the judgements', () => {
+    // Emotional vocabulary is exactly what a mental-health corpus is indexed
+    // on, so it must survive the filter.
+    for (const word of ['low', 'tired', 'alone', 'sleep', 'pain', 'worried']) {
+      expect(EVIDENCE_STOPWORDS.has(word)).toBe(false)
+    }
   })
 })

@@ -4,8 +4,10 @@ import { bm25Ranking, buildLexicalIndex, tokenize } from '../echo/keyword'
 import { similarity } from '../echo/retrieve'
 import {
   EVIDENCE_CORPUS,
+  EVIDENCE_STOPWORDS,
   evidenceEmbeddingText,
   evidenceRelevance,
+  evidenceTokens,
   topicAnchors,
   type EvidenceDoc,
 } from './evidence'
@@ -200,7 +202,7 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
    * will always find *something* for any three words, so vagueness is measured
    * on the question rather than inferred from a failed classification.
    */
-  const queryTokens = tokenize(trimmed)
+  const queryTokens = evidenceTokens(trimmed)
   const content = [...queryTokens].filter((term) => !PLACEHOLDER_TERMS.has(term))
   const anchors = topicAnchors()
   const named = content.filter((term) => anchors.has(term))
@@ -215,8 +217,10 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
    *
    * So vagueness is measured by whether the question *names* anything the
    * corpus knows about, and only falls back to counting words when it names
-   * nothing. "is this bad" still clarifies, because "bad" is not the name of
-   * anything.
+   * nothing. "is this bad" still clarifies: `evidenceTokens` drops "bad" as
+   * evaluative rather than topical, which leaves the question naming nothing
+   * at all — and "how can I feel better when I am low" clarifies for the same
+   * reason, where it used to answer confidently about vertigo.
    */
   const tooVague =
     risk.level === 'unknown' ||
@@ -235,6 +239,7 @@ export function runGuidePipeline({ query, dense = null }: GuidePipelineInput): G
   const { terms, expansions } = expandQuery(trimmed)
   const index = buildLexicalIndex(
     EVIDENCE_CORPUS.map((doc) => ({ id: doc.id, text: evidenceEmbeddingText(doc) })),
+    EVIDENCE_STOPWORDS,
   )
   const docById = new Map(EVIDENCE_CORPUS.map((doc) => [doc.id, doc]))
 
