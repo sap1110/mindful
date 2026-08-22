@@ -38,5 +38,29 @@ export default defineConfig({
      * you can read it.
      */
     sourcemap: false,
+
+    rollupOptions: {
+      output: {
+        /**
+         * Split the framework out of the application chunk.
+         *
+         * Not chasing the bundler's warning for its own sake. These three
+         * libraries change only when a dependency is upgraded, while the app
+         * chunk changes on every commit — sharing one file means a one-line
+         * copy fix re-downloads React as well. Separated, and served with the
+         * year-long immutable cache `vercel.json` puts on hashed filenames,
+         * a returning visitor fetches only the part that actually moved.
+         *
+         * Deliberately coarse. `@huggingface/transformers` is absent because
+         * it is already split by the dynamic `import()` in `echo/embeddings.ts`
+         * — naming it here would pull ~557kB back into the eager graph and
+         * undo the entire point of loading the model only after consent.
+         */
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          motion: ['framer-motion'],
+        },
+      },
+    },
   },
 })
