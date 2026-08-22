@@ -1,0 +1,16 @@
+# One line ending in the repository, whatever the checkout platform does.
+# Without this, a Windows clone commits CRLF and a macOS clone commits LF, and
+# every file either of them touches shows up as wholly rewritten in the diff.
+* text=auto eol=lf
+
+# Binaries git must not "fix".
+*.woff2 binary
+*.wasm  binary
+*.onnx  binary
+*.png   binary
+*.jpg   binary
+*.ico   binary
+
+# Generated, and noise in a review — collapsed in diffs, still versioned.
+package-lock.json linguist-generated=true -diff
+src/lib/guide/models/*.ts linguist-generated=true

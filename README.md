@@ -1,8 +1,16 @@
 # Mindful
 
+> **Mental-health support that never leaves your device.**
+
 A private mental-health and concussion-recovery companion that runs entirely in
 the browser. No backend, no account, no analytics, and no runtime network call —
 including for the AI.
+
+[![CI](https://github.com/sap1110/mindful/actions/workflows/ci.yml/badge.svg)](https://github.com/sap1110/mindful/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-241%20passing-2f7a5a)
+![WCAG](https://img.shields.io/badge/WCAG%202.1-A%2FAA%20scanned-2f7a5a)
+![Backend](https://img.shields.io/badge/backend-none-6b6f73)
+![Licence](https://img.shields.io/badge/licence-MIT-6b6f73)
 
 Built solo for **Hack for Humanity, Summer 2026**.
 
@@ -22,6 +30,7 @@ Built solo for **Hack for Humanity, Summer 2026**.
 - [Concussion recovery](#concussion-recovery)
 - [Not a diagnosis](#not-a-diagnosis)
 - [Getting started](#getting-started)
+- [Deploying](#deploying)
 - [Scripts](#scripts)
 - [Architecture](#architecture)
 - [Design system](#design-system)
@@ -475,21 +484,79 @@ npm run dev
 
 To try it with data in it, open **Settings → Load sample data**.
 
+## Deploying
+
+The app is a static bundle with no server side, so any static host will serve
+it. `vercel.json` configures Vercel specifically:
+
+```bash
+npm i -g vercel
+vercel --prod
+```
+
+Or import the repository at [vercel.com/new](https://vercel.com/new) — the
+framework preset, build command and output directory are all read from
+`vercel.json`, and there are **no environment variables to set**, because there
+is nothing for the app to hold a secret about.
+
+Three things in that file are worth knowing about:
+
+- **The SPA rewrite.** Routing is `BrowserRouter`, so `/mood` is a client-side
+  path with no file behind it. Without `rewrites`, opening or refreshing any
+  screen other than `/` returns the host's 404 rather than the app. Vercel
+  matches real files first, so hashed assets are unaffected.
+- **The CSP, again, as a response header.** `index.html` carries the policy in
+  a `<meta>` tag so it travels with the bundle to any host. A meta tag cannot
+  express `frame-ancestors`, so the header version adds it — clickjacking is
+  the one hole the meta tag structurally cannot close. The two policies are
+  byte-identical otherwise, which matters: a browser enforces the *intersection*
+  of both, so any drift between them silently tightens the app until something
+  breaks. Change one, change the other.
+- **Immutable caching on `/assets/*` and `/fonts/*`.** Vite content-hashes
+  those filenames, so a year-long `immutable` cache is safe, and it is what
+  keeps the second visit — including the ~23MB WASM runtime — free.
+
+`Cross-Origin-Embedder-Policy` is deliberately *not* set. It would unlock
+threaded WASM, but it also requires every cross-origin subresource to opt in
+with CORP, which the Hugging Face CDN serving the model weights does not
+reliably do. Faster inference is not worth trading the model download for.
+
+**One caveat for judges:** the first use of Echo or Ask downloads ~30MB of
+model weights, once, after an explicit consent screen. On a slow connection,
+click the consent button before demoing.
+
 ## Scripts
 
 | Command | Description |
 | ------- | ----------- |
 | `npm run dev` | Vite dev server with HMR |
 | `npm run build` | Type-check (`tsc -b`) and build to `dist/` |
+| `npm run typecheck` | Types only, without the bundle |
 | `npm run lint` | ESLint over the project |
-| `npm run test` | Playwright + axe suite (starts its own dev server) |
+| `npm run test` | Playwright + axe suite, 241 specs (starts its own dev server) |
+| `npm run verify` | `lint` + `build` + `test` — the pre-push gate, mirrored in CI |
+| `npm run preview` | Serve the production build locally |
 | `npm run train` | Refit both classifier heads and rewrite the model artefacts |
 | `npm run build:evidence` | Rebuild the MedQuAD slice of the evidence corpus |
-| `npx tsx scripts/audit-crisis-guard.ts <csv>` | Audit crisis-guard recall and precision against a local corpus |
-| `npm run verify` | `lint` + `build` + `test` — the pre-push gate |
-| `npm run preview` | Serve the production build locally |
+| `npm run audit:crisis -- <csv>` | Audit crisis-guard recall and precision against a local corpus |
 
 ## Architecture
+
+The repository root, first — there is no server directory, and that absence is
+the architecture:
+
+```
+.
+├── index.html                 # The app shell, and the CSP that enforces the promise
+├── vercel.json                # SPA rewrite, security headers, immutable asset caching
+├── vite.config.ts             # Drops console/debugger and source maps from production
+├── playwright.config.ts       # The browser + axe suite that gates the branch
+├── .github/workflows/ci.yml   # `npm run verify`, split so a red build names its half
+├── public/fonts/              # Self-hosted woff2 — no page load reaches a font CDN
+├── scripts/                   # Corpus builder and the crisis-guard audit
+├── tests/                     # 241 specs, one file per screen plus the safety suites
+└── src/                       # Everything below
+```
 
 ```
 src/
@@ -524,7 +591,10 @@ src/
 │   │   ├── evidence.ts        #   the cited corpus, with per-document metadata
 │   │   ├── compose.ts         #   extractive "generation" — cannot invent facts
 │   │   ├── verify.ts          #   independent verdicts: grounding, scope, citations
-│   │   └── evaluation.ts      #   eight adversarial categories, gated in CI
+│   │   ├── classifier.ts      #   the trained heads, loaded from the artefacts
+│   │   ├── evaluation.ts      #   eight adversarial categories, gated in CI
+│   │   ├── models/            #   checked-in weights: intent + risk, lexical + embedding
+│   │   └── training/          #   dataset, features, logreg, `npm run train`
 │   ├── concussion/            # The recovery layer
 │   │   ├── redflags.ts        #   CDC danger signs, shown unprompted
 │   │   ├── symptoms.ts        #   the 22-item check and its scoring
@@ -540,9 +610,11 @@ src/
 │   ├── PageShell.tsx          # Skip link, header, <main>, disclaimer
 │   ├── RequireProfile.tsx     # The on-device gate
 │   ├── AppNav.tsx             # The persistent bottom bar
+│   ├── ErrorBoundary.tsx      # Fails without disclosing — no message, no stack
 │   ├── echo/ · screener/ · crisis/ · mood/ · journal/ · breathe/ · concussion/
+│   ├── tour/ · landing/ · home/
 │   └── ui/                    # Button, Card, Chip, Overlay, TextField, ChoiceTile, …
-└── routes/                    # One file per screen
+└── routes/                    # One file per screen, plus onboarding/ for its steps
 ```
 
 **State.** `useSyncExternalStore` over `localStorage` rather than a context

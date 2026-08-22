@@ -8,8 +8,7 @@ const baseURL = `http://127.0.0.1:${PORT}`
  * The browser suite: every screen rendered in a real Chromium, driven the way
  * a person would drive it, with an axe-core WCAG 2.1 A/AA scan on each one.
  *
- * `scripts/smoke.mjs` still exists for a quick screenshot pass during design
- * work; this is the version that gates the branch.
+ * This is the suite that gates the branch, and the one CI runs.
  */
 export default defineConfig({
   testDir: './tests',

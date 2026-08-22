@@ -1,18 +1,44 @@
 {
   "name": "mindful",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "description": "Mental health companion app for Hack for Humanity hackathon",
+  "description": "A private mental-health and concussion-recovery companion that runs entirely in the browser — no backend, no account, no analytics, and no runtime network call, including for the AI.",
+  "keywords": [
+    "mental-health",
+    "concussion",
+    "privacy",
+    "on-device-ai",
+    "local-first",
+    "transformers-js",
+    "react",
+    "vite",
+    "accessibility"
+  ],
+  "license": "MIT",
+  "author": "sap1110",
+  "homepage": "https://github.com/sap1110/mindful#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sap1110/mindful.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sap1110/mindful/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "verify": "npm run lint && npm run build && npm run test",
+    "typecheck": "tsc -b",
     "test": "playwright test",
+    "verify": "npm run lint && npm run build && npm run test",
     "train": "tsx src/lib/guide/training/train.ts",
-    "build:evidence": "node scripts/build-evidence.mjs"
+    "build:evidence": "node scripts/build-evidence.mjs",
+    "audit:crisis": "tsx scripts/audit-crisis-guard.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

@@ -45,5 +45,12 @@ playwright-report/
 # Local build-agent scratch
 .bolter-task.md
 
-# Local planning documents
+# Local planning documents - kept out of the repo, but under docs/ on disk
+docs/evidence-first-ai-health-guidance-prd.md
 evidence_first_ai_health_guidance_prd*.md
+
+# Deploy
+.vercel
+
+# Per-machine editor and tool settings, whichever one wrote them
+*/settings.local.json
