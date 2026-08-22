@@ -1,0 +1,53 @@
+# The same gate `npm run verify` runs locally, run on every push and PR.
+#
+# Split into two jobs rather than one `npm run verify` so a red build tells you
+# which half broke without opening the log: static checks are seconds, the
+# browser suite is minutes, and there is no reason to wait for Chromium to
+# install before finding out that a type is wrong.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Lint, types and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  browser:
+    name: Playwright + axe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Chromium only — the suite pins one project, and installing the other
+      # engines is a couple of minutes spent on browsers nothing runs in.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test
+      - uses: actions/upload-artifact@v4
+        # Traces are retained on failure, so they only exist when they matter.
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
